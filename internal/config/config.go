@@ -2,26 +2,55 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
 type TLS struct {
-	Enabled                   bool `yaml:"enabled"`
-	CAFile, CertFile, KeyFile string
+	Enabled  bool   `yaml:"enabled"`
+	CAFile   string `yaml:"ca_file"`
+	CertFile string `yaml:"cert_file"`
+	KeyFile  string `yaml:"key_file"`
 }
 type Context struct {
-	Host string `yaml:"host"`
-	TLS  TLS    `yaml:"tls"`
+	Host        string `yaml:"host"`
+	Description string `yaml:"description,omitempty"`
+	TLS         TLS    `yaml:"tls"`
 }
 type Audit struct {
-	Enabled              bool `yaml:"enabled"`
-	MaxSizeMB, Retention int
+	Enabled   bool   `yaml:"enabled"`
+	Path      string `yaml:"path,omitempty"`
+	MaxSizeMB int    `yaml:"max_size_mb"`
+	Retention int    `yaml:"retention"`
 }
-type Dangerous struct{ RemoveContainers, RemoveImages, RemoveVolumes, RemoveNetworks, Prune, SwarmChanges bool }
+type Dangerous struct {
+	RemoveContainers bool `yaml:"remove_containers"`
+	RemoveImages     bool `yaml:"remove_images"`
+	RemoveVolumes    bool `yaml:"remove_volumes"`
+	RemoveNetworks   bool `yaml:"remove_networks"`
+	Prune            bool `yaml:"prune"`
+	SwarmChanges     bool `yaml:"swarm_changes"`
+}
+type Registry struct {
+	HubURL   string        `yaml:"hub_url"`
+	PageSize int           `yaml:"page_size"`
+	Timeout  time.Duration `yaml:"-"`
+	TimeoutS string        `yaml:"timeout"`
+}
+type UI struct {
+	CompactWidth     int `yaml:"compact_width"`
+	RecommendedWidth int `yaml:"recommended_width"`
+}
+type Shell struct {
+	Candidates []string `yaml:"candidates"`
+	EscapeKey  string   `yaml:"escape_key"`
+}
+type Timeouts struct{ Connect, Operation, Stream string }
 type Config struct {
 	DefaultContext   string             `yaml:"default_context"`
 	Contexts         map[string]Context `yaml:"contexts"`
@@ -29,14 +58,20 @@ type Config struct {
 	Refresh          string             `yaml:"refresh_interval"`
 	ReadOnly         bool               `yaml:"read_only"`
 	Theme            string             `yaml:"theme"`
+	Language         string             `yaml:"language"`
 	MouseEnabled     bool               `yaml:"mouse_enabled"`
 	TelemetryEnabled bool               `yaml:"telemetry_enabled"`
 	Audit            Audit              `yaml:"audit"`
 	DangerousActions Dangerous          `yaml:"dangerous_actions"`
+	Registry         Registry           `yaml:"registry"`
+	UI               UI                 `yaml:"ui"`
+	Shell            Shell              `yaml:"shell"`
+	Timeouts         Timeouts           `yaml:"timeouts"`
+	Debug            bool               `yaml:"debug"`
 }
 
 func Default() Config {
-	return Config{DefaultContext: "local", Contexts: map[string]Context{"local": {Host: "unix:///var/run/docker.sock"}}, Refresh: "3s", RefreshInterval: 3 * time.Second, Theme: "dark-ops", MouseEnabled: true, Audit: Audit{Enabled: true, MaxSizeMB: 10, Retention: 5}, DangerousActions: Dangerous{true, true, true, true, true, true}}
+	return Config{DefaultContext: "local", Contexts: map[string]Context{"local": {Host: "unix:///var/run/docker.sock"}}, Refresh: "3s", RefreshInterval: 3 * time.Second, Theme: "dark-ops", Language: "pt-BR", MouseEnabled: true, Audit: Audit{Enabled: true, MaxSizeMB: 10, Retention: 5}, DangerousActions: Dangerous{true, true, true, true, true, true}, Registry: Registry{HubURL: "https://hub.docker.com", PageSize: 25, TimeoutS: "10s", Timeout: 10 * time.Second}, UI: UI{CompactWidth: 76, RecommendedWidth: 120}, Shell: Shell{Candidates: []string{"/bin/bash", "/bin/sh", "bash", "sh", "ash"}, EscapeKey: "ctrl+]"}, Timeouts: Timeouts{Connect: "8s", Operation: "35s", Stream: "30m"}}
 }
 func Path() string { d, _ := os.UserConfigDir(); return filepath.Join(d, "docktop", "config.yaml") }
 func Load(path string) (Config, error) {
@@ -46,7 +81,7 @@ func Load(path string) (Config, error) {
 	}
 	b, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return c, nil
+		return applyEnvironment(c), nil
 	}
 	if err != nil {
 		return c, err
@@ -64,5 +99,70 @@ func Load(path string) (Config, error) {
 	if _, ok := c.Contexts[c.DefaultContext]; !ok {
 		return c, errors.New("default_context não existe em contexts")
 	}
-	return c, nil
+	if c.Registry.PageSize < 1 || c.Registry.PageSize > 100 {
+		return c, errors.New("registry.page_size deve estar entre 1 e 100")
+	}
+	if c.Registry.TimeoutS == "" {
+		c.Registry.TimeoutS = "10s"
+	}
+	c.Registry.Timeout, err = time.ParseDuration(c.Registry.TimeoutS)
+	if err != nil || c.Registry.Timeout <= 0 {
+		return c, errors.New("registry.timeout inválido")
+	}
+	for name, dc := range c.Contexts {
+		if err := validateContext(name, dc); err != nil {
+			return c, err
+		}
+	}
+	return applyEnvironment(c), nil
+}
+
+// applyEnvironment follows Docker's standard precedence when the default local
+// context was not explicitly replaced. Named DockTop contexts remain authoritative.
+func applyEnvironment(c Config) Config {
+	if name := strings.TrimSpace(os.Getenv("DOCKER_CONTEXT")); name != "" {
+		if _, ok := c.Contexts[name]; ok {
+			c.DefaultContext = name
+		}
+	}
+	if host := strings.TrimSpace(os.Getenv("DOCKER_HOST")); host != "" && c.DefaultContext == "local" {
+		dc := c.Contexts["local"]
+		dc.Host = host
+		if os.Getenv("DOCKER_TLS_VERIFY") != "" {
+			dc.TLS.Enabled = true
+		}
+		c.Contexts["local"] = dc
+	}
+	return c
+}
+
+func validateContext(name string, c Context) error {
+	if c.Host == "" {
+		return fmt.Errorf("contexto %q: host vazio", name)
+	}
+	if !strings.HasPrefix(c.Host, "unix://") && !strings.HasPrefix(c.Host, "tcp://") && !strings.HasPrefix(c.Host, "http://") && !strings.HasPrefix(c.Host, "https://") {
+		return fmt.Errorf("contexto %q: endpoint Docker inválido", name)
+	}
+	if c.TLS.Enabled && (c.TLS.CAFile == "" || c.TLS.CertFile == "" || c.TLS.KeyFile == "") {
+		return fmt.Errorf("contexto %q: TLS exige ca_file, cert_file e key_file", name)
+	}
+	return nil
+}
+
+func Save(path string, c Config) error {
+	if path == "" {
+		path = Path()
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return err
+	}
+	b, err := yaml.Marshal(c)
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err = os.WriteFile(tmp, b, 0600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }

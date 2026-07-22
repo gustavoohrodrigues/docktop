@@ -2,3 +2,6 @@
 /dist/
 coverage.out
 *.log
+
+# Landing page local. Será publicada separadamente no Vercel.
+/website/

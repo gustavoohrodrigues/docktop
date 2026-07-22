@@ -17,11 +17,12 @@ import (
 var version = "dev"
 
 func main() {
-	var path, contextName, theme string
+	var path, contextName, theme, language string
 	var readOnly, noMouse, debug, showVersion bool
 	flag.StringVar(&path, "config", "", "arquivo de configuração")
 	flag.StringVar(&contextName, "context", "", "contexto Docker")
 	flag.StringVar(&theme, "theme", "", "tema")
+	flag.StringVar(&language, "language", "", "idioma: pt-BR, en-US ou es")
 	flag.BoolVar(&readOnly, "read-only", false, "bloqueia mutações")
 	flag.BoolVar(&noMouse, "no-mouse", false, "desabilita mouse")
 	flag.BoolVar(&debug, "debug", false, "diagnóstico detalhado")
@@ -40,6 +41,9 @@ func main() {
 	}
 	if theme != "" {
 		cfg.Theme = theme
+	}
+	if language != "" {
+		cfg.Language = language
 	}
 	if readOnly {
 		cfg.ReadOnly = true

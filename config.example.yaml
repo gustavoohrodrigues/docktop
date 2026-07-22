@@ -6,22 +6,38 @@ contexts:
     host: tcp://docker-manager.exemplo.local:2376
     tls:
       enabled: true
-      cafile: /home/usuario/.docker/ca.pem
-      certfile: /home/usuario/.docker/cert.pem
-      keyfile: /home/usuario/.docker/key.pem
+      ca_file: /home/usuario/.docker/ca.pem
+      cert_file: /home/usuario/.docker/cert.pem
+      key_file: /home/usuario/.docker/key.pem
 refresh_interval: 3s
 read_only: false
 theme: dark-ops
+language: pt-BR
 mouse_enabled: true
 telemetry_enabled: false
 audit:
   enabled: true
-  maxsizemb: 10
+  max_size_mb: 10
   retention: 5
 dangerous_actions:
-  removecontainers: true
-  removeimages: true
-  removevolumes: false
-  removenetworks: true
+  remove_containers: true
+  remove_images: true
+  remove_volumes: false
+  remove_networks: true
   prune: false
-  swarmchanges: false
+  swarm_changes: false
+registry:
+  hub_url: https://hub.docker.com
+  page_size: 25
+  timeout: 10s
+ui:
+  compact_width: 76
+  recommended_width: 120
+shell:
+  candidates: [/bin/bash, /bin/sh, bash, sh, ash]
+  escape_key: ctrl+]
+timeouts:
+  connect: 8s
+  operation: 35s
+  stream: 30m
+debug: false

@@ -28,3 +28,18 @@ func TestRejectFastRefresh(t *testing.T) {
 		t.Fatal("esperava erro")
 	}
 }
+
+func TestLoadLanguage(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "language.yaml")
+	data := "default_context: local\ncontexts: {local: {host: unix:///var/run/docker.sock}}\nrefresh_interval: 3s\nlanguage: en-US\n"
+	if err := os.WriteFile(p, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Language != "en-US" {
+		t.Fatalf("idioma não carregado: %q", c.Language)
+	}
+}

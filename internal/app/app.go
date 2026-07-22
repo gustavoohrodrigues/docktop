@@ -18,7 +18,7 @@ func New(ctx context.Context, c config.Config, version string, debug bool) (*ui.
 	if err != nil {
 		return nil, nil, err
 	}
-	a, err := audit.New(c.Audit.Enabled)
+	a, err := audit.NewWithOptions(c.Audit.Enabled, c.Audit.Path, c.Audit.MaxSizeMB, c.Audit.Retention)
 	if err != nil {
 		e.Close()
 		return nil, nil, err

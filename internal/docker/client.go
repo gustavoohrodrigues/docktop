@@ -36,6 +36,26 @@ type Image struct {
 }
 type Volume struct{ Name, Driver, Scope string }
 type Network struct{ ID, Name, Driver, Scope string }
+type Service struct {
+	ID, Name, Stack, Image, Mode, Update string
+	Desired, Running                     uint64
+}
+type Task struct {
+	ID, ServiceID, Service, NodeID, Node, Desired, State, Error string
+	Slot                                                        int
+}
+type Node struct {
+	ID, Hostname, Role, Availability, State, Manager, Engine string
+	CPUs, Memory                                             int64
+}
+type Stack struct {
+	Name                               string
+	Services, Desired, Running, Failed int
+}
+type Event struct {
+	Time                   time.Time
+	Type, Action, ID, Name string
+}
 type Snapshot struct {
 	Info       system.Info
 	Version    string
@@ -45,12 +65,21 @@ type Snapshot struct {
 	Networks   []Network
 	At         time.Time
 	Metrics    map[string]ContainerMetric
+	Services   []Service
+	Tasks      []Task
+	Nodes      []Node
+	Stacks     []Stack
+	Events     []Event
 }
 type Engine interface {
 	Snapshot(context.Context) (Snapshot, error)
 	Start(context.Context, string) error
 	Stop(context.Context, string) error
 	Restart(context.Context, string) error
+	UpdateImage(context.Context, string, func(string)) (string, error)
+	ScaleService(context.Context, string, uint64) error
+	SetNodeAvailability(context.Context, string, string) error
+	ClusterInspect(context.Context, string, string) (string, error)
 	Pause(context.Context, string) error
 	Unpause(context.Context, string) error
 	Remove(context.Context, string, bool) error
@@ -145,6 +174,10 @@ func (s *SDK) Snapshot(ctx context.Context) (Snapshot, error) {
 		o.Networks = append(o.Networks, Network{x.ID, x.Name, x.Driver, x.Scope})
 	}
 	o.Metrics = s.metrics(ctx, cs)
+	if info.Swarm.ControlAvailable {
+		s.collectSwarm(ctx, &o)
+	}
+	o.Events = s.recentEvents(ctx, 100)
 	return o, nil
 }
 func first(v []string) string {

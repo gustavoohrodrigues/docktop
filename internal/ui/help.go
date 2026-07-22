@@ -1,23 +1,24 @@
 package ui
 
-const helpManual = `DOCKERMIN — MANUAL OPERACIONAL DOCKER EM PT-BR
+const helpManualPT = `DOCKTOP — MANUAL OPERACIONAL DOCKER EM PT-BR
 
-ATALHOS DO DOCKERMIN
+ATALHOS DO DOCKTOP
   F1 ou ?       abre/fecha este manual
   Tab/Shift+Tab próxima/anterior aba
   ←/→           navega entre módulos
   j/k ou ↑/↓    move a seleção
   g/G           primeiro/último item
-  r             atualiza; em Containers reinicia o selecionado
+  r             atualiza a tela atual
   R             liga/desliga atualização automática
   t             alterna tema
   q / Ctrl+C    encerra com segurança
 
-CONTAINERS NO DOCKERMIN
+CONTAINERS NO DOCKTOP
   n  criar       abre formulário; baixa a imagem, cria e inicia
   S  start       inicia um container parado
   T  stop        solicita parada graciosa (timeout de 10s)
-  r  restart     reinicia o container
+  x  restart     reinicia o container
+  u  update      baixa a imagem atual e recria o container com rollback
   p  pause       congela/descongela todos os processos
   l  logs        exibe as últimas 300 linhas com timestamps
   i  inspect     mostra configuração e estado em JSON
@@ -138,3 +139,98 @@ SEGURANÇA
   Confirme contexto e endpoint no rodapé antes de agir.
   Use --read-only para observação. Nunca digite secrets em campos comuns.
   Volumes e prune podem apagar dados sem recuperação.`
+
+const helpManualEN = `DOCKTOP — DOCKER OPERATIONS MANUAL
+
+GLOBAL SHORTCUTS
+  F1 or ?       open/close this manual
+  Tab/Shift+Tab next/previous tab
+  ←/→           navigate modules
+  j/k or ↑/↓    move selection
+  g/G           first/last item
+  r             refresh current screen
+  R             toggle automatic refresh
+  t             change theme
+  L             select language in Settings
+  q / Ctrl+C    quit safely
+
+CONTAINERS
+  n create; S start; T graceful stop; x restart
+  u pull and recreate with rollback; p pause/unpause
+  l logs; i inspect; o processes; e exec shell
+  d remove after typed confirmation
+
+IMAGES AND REGISTRY
+  p pulls an image or selected Hub result
+  / searches Docker Hub; d removes with confirmation
+
+VOLUMES AND NETWORKS
+  n creates a resource; d removes it after confirmation
+
+SWARM, SERVICES, NODES AND STACKS
+  Services lists real replicas and tasks; s scales replicated services.
+  Nodes lists cluster members; A/P/D changes availability with confirmation.
+  Stacks aggregates services by com.docker.stack.namespace.
+  Worker endpoints remain limited; cluster operations require a manager.
+
+EVENTS, AUDIT AND SETTINGS
+  Events reads the Docker Events API. Audit reads sanitized local JSONL records.
+  Settings shows effective configuration and changes theme/language.
+
+SECURITY
+  The docker group grants root-equivalent host power.
+  Verify context and endpoint before acting. Use --read-only for observation.
+  Volumes, removals and prune may cause unrecoverable data loss.`
+
+const helpManualES = `DOCKTOP — MANUAL DE OPERACIONES DOCKER
+
+ATAJOS GLOBALES
+  F1 o ?        abre/cierra este manual
+  Tab/Shift+Tab pestaña siguiente/anterior
+  ←/→           navega entre módulos
+  j/k o ↑/↓     mueve la selección
+  g/G           primer/último elemento
+  r             actualiza la pantalla actual
+  R             activa/desactiva actualización automática
+  t             cambia el tema
+  L             selecciona idioma en Ajustes
+  q / Ctrl+C    sale de forma segura
+
+CONTENEDORES
+  n crear; S iniciar; T parada ordenada; x reiniciar
+  u descarga y recrea con rollback; p pausa/reanuda
+  l logs; i inspect; o procesos; e shell exec
+  d elimina después de confirmación escrita
+
+IMÁGENES Y REGISTRO
+  p descarga una imagen o resultado seleccionado de Hub
+  / busca en Docker Hub; d elimina con confirmación
+
+VOLÚMENES Y REDES
+  n crea un recurso; d lo elimina después de confirmación
+
+SWARM, SERVICIOS, NODOS Y STACKS
+  Servicios muestra réplicas y tareas reales; s escala servicios replicados.
+  Nodos muestra miembros; A/P/D cambia disponibilidad con confirmación.
+  Stacks agrupa servicios mediante com.docker.stack.namespace.
+  Los workers son limitados; las operaciones del clúster requieren un manager.
+
+EVENTOS, AUDITORÍA Y AJUSTES
+  Eventos consulta Docker Events API. Auditoría lee registros JSONL sanitizados.
+  Ajustes muestra configuración efectiva y cambia tema/idioma.
+
+SEGURIDAD
+  El grupo docker concede poder equivalente a root en el host.
+  Verifique contexto y endpoint. Use --read-only para observación.
+  Volúmenes, eliminaciones y prune pueden causar pérdida irreversible.`
+
+func helpManual(language string) string {
+	switch language {
+	case "en-US":
+		return helpManualEN
+	case "es":
+		return helpManualES
+	default:
+		return helpManualPT
+	}
+}
