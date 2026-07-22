@@ -1,0 +1,27 @@
+default_context: local
+contexts:
+  local:
+    host: unix:///var/run/docker.sock
+  production-manager:
+    host: tcp://docker-manager.exemplo.local:2376
+    tls:
+      enabled: true
+      cafile: /home/usuario/.docker/ca.pem
+      certfile: /home/usuario/.docker/cert.pem
+      keyfile: /home/usuario/.docker/key.pem
+refresh_interval: 3s
+read_only: false
+theme: dark-ops
+mouse_enabled: true
+telemetry_enabled: false
+audit:
+  enabled: true
+  maxsizemb: 10
+  retention: 5
+dangerous_actions:
+  removecontainers: true
+  removeimages: true
+  removevolumes: false
+  removenetworks: true
+  prune: false
+  swarmchanges: false
