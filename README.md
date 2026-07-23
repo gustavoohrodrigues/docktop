@@ -360,6 +360,6 @@ Distribuído sob a licença [MIT](LICENSE).
 
 <div align="center">
 
-Feito por [gustavoohrodrigues](https://github.com/gustavoohrodrigues).
+By [Orqly](https://github.com/orqly).
 
 </div>
