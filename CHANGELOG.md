@@ -1,5 +1,9 @@
 # Changelog
 
+Tags no formato `vX.Y.Z` executam os testes, compilam os binários Linux
+`amd64` e `arm64`, geram um manifesto SHA-256 e publicam uma GitHub Release.
+O instalador oficial consome automaticamente a release mais recente.
+
 ## 0.3.0 - 2026-07-27
 
 - Adiciona splash animada e localizada na inicialização.

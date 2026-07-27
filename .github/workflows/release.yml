@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Validate tag
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid release tag: ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+          echo "number=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build Linux binaries
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.number }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" \
+              go build -trimpath \
+                -ldflags="-s -w -X main.version=${VERSION}" \
+                -o "dist/docktop-linux-${arch}" ./cmd/docktop
+          done
+
+      - name: Create checksum manifest
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.number }}
+        run: |
+          set -euo pipefail
+          {
+            printf 'version %s\n' "$VERSION"
+            for asset in docktop-linux-amd64 docktop-linux-arm64; do
+              printf '%s %s\n' \
+                "$asset" \
+                "$(sha256sum "dist/$asset" | awk '{print $1}')"
+            done
+          } > dist/manifest.txt
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" \
+            dist/docktop-linux-amd64 \
+            dist/docktop-linux-arm64 \
+            dist/manifest.txt \
+            --title "DockTop $GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag
