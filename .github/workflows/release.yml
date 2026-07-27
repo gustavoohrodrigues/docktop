@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versão sem o prefixo v (ex.: 0.3.0)"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -28,12 +34,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
+          version="${{ inputs.version }}"
+          if [[ -z "$version" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          fi
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Invalid release tag: ${GITHUB_REF_NAME}" >&2
+            echo "Invalid release version: ${version}" >&2
             exit 1
           fi
           echo "number=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
 
       - name: Test
         run: go test ./...
@@ -71,12 +81,86 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
         run: |
           set -euo pipefail
-          gh release create "$GITHUB_REF_NAME" \
-            dist/docktop-linux-amd64 \
-            dist/docktop-linux-arm64 \
-            dist/manifest.txt \
-            --title "DockTop $GITHUB_REF_NAME" \
-            --generate-notes \
-            --verify-tag
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" \
+              dist/docktop-linux-amd64 \
+              dist/docktop-linux-arm64 \
+              dist/manifest.txt \
+              --clobber
+          else
+            gh release create "$RELEASE_TAG" \
+              dist/docktop-linux-amd64 \
+              dist/docktop-linux-arm64 \
+              dist/manifest.txt \
+              --title "DockTop $RELEASE_TAG" \
+              --generate-notes \
+              --verify-tag
+          fi
+
+      - name: Check out website
+        uses: actions/checkout@v4
+        with:
+          repository: gustavoohrodrigues/docktop-website
+          token: ${{ secrets.WEBSITE_REPO_TOKEN }}
+          path: website
+
+      - name: Update website downloads
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.number }}
+        run: |
+          set -euo pipefail
+          cp dist/docktop-linux-amd64 website/downloads/
+          cp dist/docktop-linux-arm64 website/downloads/
+
+          installer_hash="$(
+            awk '$1 == "docktop.sh" { print $2; exit }' \
+              website/downloads/manifest.txt
+          )"
+          update_check_hash="$(
+            awk '$1 == "update-check.sh" { print $2; exit }' \
+              website/downloads/manifest.txt
+          )"
+          {
+            printf 'version %s\n' "$VERSION"
+            for asset in docktop-linux-amd64 docktop-linux-arm64; do
+              printf '%s %s\n' \
+                "$asset" \
+                "$(sha256sum "website/downloads/$asset" | awk '{print $1}')"
+            done
+            printf 'docktop.sh %s\n' "$installer_hash"
+            printf 'update-check.sh %s\n' "$update_check_hash"
+          } > website/downloads/manifest.txt
+
+      - name: Publish website downloads
+        working-directory: website
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add downloads/
+          if git diff --cached --quiet; then
+            echo "Website downloads are already current."
+            exit 0
+          fi
+          git commit -m "Atualiza DockTop para ${RELEASE_TAG}"
+          git push origin HEAD:main
+
+      - name: Trigger Vercel deployment
+        shell: bash
+        env:
+          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$VERCEL_DEPLOY_HOOK_URL" ]]; then
+            curl --fail --silent --show-error \
+              --request POST "$VERCEL_DEPLOY_HOOK_URL"
+          else
+            echo "No deploy hook configured; relying on Vercel Git Integration."
+          fi
