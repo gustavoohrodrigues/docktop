@@ -220,6 +220,8 @@ docktop --help
 | `Tab` / `Shift+Tab` | Ir para a próxima área ou voltar à anterior |
 | `←` / `→` | Navegar entre módulos |
 | `↑` / `↓` ou `j` / `k` | Navegar em listas |
+| `PgUp` / `PgDn` ou `Ctrl+U` / `Ctrl+D` | Rolar uma página |
+| `g` / `G` | Ir ao primeiro ou último item |
 | `Enter` | Abrir detalhes ou confirmar |
 | `Esc` | Fechar modal ou retornar |
 | `/` | Iniciar pesquisa contextual |

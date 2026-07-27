@@ -38,6 +38,7 @@ type auditMsg struct {
 	e       error
 }
 type tickMsg time.Time
+type splashFrameMsg time.Time
 
 type Model struct {
 	ctx                                      context.Context
@@ -46,12 +47,14 @@ type Model struct {
 	audit                                    *audit.Logger
 	hub                                      *registry.Hub
 	version                                  string
-	w, h, tab, cursor, scroll                int
+	w, h, tab, cursor, scroll, listOffset    int
 	languageCursor                           int
 	snap                                     dock.Snapshot
 	results                                  []registry.Result
 	err, status, mode, input, prompt, detail string
 	loading, auto                            bool
+	splash                                   bool
+	splashFrame                              int
 	targetID, targetName, action             string
 	th                                       theme.Theme
 	cpuHistory, memHistory                   []float64
@@ -60,9 +63,11 @@ type Model struct {
 
 func New(ctx context.Context, c config.Config, e dock.Engine, a *audit.Logger, v string) *Model {
 	c.Language = i18n.Normalize(c.Language)
-	return &Model{ctx: ctx, cfg: c, engine: e, audit: a, hub: registry.NewHub(), version: v, auto: true, loading: true, th: theme.Get(c.Theme)}
+	return &Model{ctx: ctx, cfg: c, engine: e, audit: a, hub: registry.NewHub(), version: v, auto: true, loading: true, splash: true, th: theme.Get(c.Theme)}
 }
-func (m *Model) Init() tea.Cmd { return tea.Batch(m.refresh(), m.loadAudit(), m.tick()) }
+func (m *Model) Init() tea.Cmd {
+	return tea.Batch(m.refresh(), m.loadAudit(), m.tick(), splashTick())
+}
 func (m *Model) refresh() tea.Cmd {
 	return func() tea.Msg { s, e := m.engine.Snapshot(m.ctx); return snapshotMsg{s, e} }
 }
@@ -88,6 +93,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		m.results = x.results
 		m.cursor = 0
+		m.listOffset = 0
 		if x.e != nil {
 			m.err = i18n.LocalizeError(m.cfg.Language, x.e.Error())
 		} else {
@@ -132,9 +138,30 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(m.refresh(), m.tick())
 		}
 		return m, m.tick()
+	case splashFrameMsg:
+		if !m.splash {
+			return m, nil
+		}
+		m.splashFrame++
+		if m.splashFrame >= splashFrames {
+			m.splash = false
+			return m, nil
+		}
+		return m, splashTick()
 	case tea.MouseMsg:
+		if m.splash {
+			m.splash = false
+			return m, nil
+		}
 		return m.updateMouse(x)
 	case tea.KeyMsg:
+		if m.splash {
+			if x.String() == "ctrl+c" {
+				return m, tea.Quit
+			}
+			m.splash = false
+			return m, nil
+		}
 		if m.mode != "" {
 			return m.updateOverlay(x)
 		}
@@ -158,10 +185,12 @@ func (m *Model) updateMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	}
 	if msg.Button == tea.MouseButtonWheelUp {
 		m.cursor = max(0, m.cursor-3)
+		m.ensureListVisible()
 		return m, nil
 	}
 	if msg.Button == tea.MouseButtonWheelDown {
 		m.cursor = min(max(0, m.count()-1), m.cursor+3)
+		m.ensureListVisible()
 		return m, nil
 	}
 	if msg.Button != tea.MouseButtonLeft {
@@ -170,7 +199,7 @@ func (m *Model) updateMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 
 	if msg.Y == 1 {
 		if tab, ok := m.tabAt(msg.X); ok {
-			m.tab, m.cursor, m.scroll = tab, 0, 0
+			m.tab, m.cursor, m.scroll, m.listOffset = tab, 0, 0, 0
 			if tab == 11 {
 				return m, m.loadAudit()
 			}
@@ -191,9 +220,14 @@ func (m *Model) updateMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if m.err != "" || m.loading || m.status != "" {
 		dataY++
 	}
-	if msg.Y >= dataY && msg.Y < dataY+m.count() {
-		m.cursor = msg.Y - dataY
+	if m.count() > m.listPageSize() {
+		dataY++
+	}
+	visible := min(m.listPageSize(), max(0, m.count()-m.listOffset))
+	if msg.Y >= dataY && msg.Y < dataY+visible {
+		m.cursor = m.listOffset + msg.Y - dataY
 		m.clamp()
+		m.ensureListVisible()
 	}
 	return m, nil
 }
@@ -240,21 +274,33 @@ func (m *Model) updateKeys(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "tab", "right":
 		m.tab = (m.tab + 1) % len(tabs)
 		m.cursor = 0
+		m.listOffset = 0
 	case "shift+tab", "left":
 		m.tab = (m.tab + len(tabs) - 1) % len(tabs)
 		m.cursor = 0
+		m.listOffset = 0
 	case "up", "k":
 		if m.cursor > 0 {
 			m.cursor--
 		}
+		m.ensureListVisible()
 	case "down", "j":
 		if m.cursor < m.count()-1 {
 			m.cursor++
 		}
+		m.ensureListVisible()
+	case "pgup", "ctrl+u":
+		m.cursor = max(0, m.cursor-m.listPageSize())
+		m.ensureListVisible()
+	case "pgdown", "ctrl+d":
+		m.cursor = min(max(0, m.count()-1), m.cursor+m.listPageSize())
+		m.ensureListVisible()
 	case "g":
 		m.cursor = 0
+		m.ensureListVisible()
 	case "G":
 		m.cursor = max(0, m.count()-1)
+		m.ensureListVisible()
 	case "R":
 		m.auto = !m.auto
 	case "?", "f1":
@@ -783,7 +829,50 @@ func (m *Model) count() int {
 	}
 	return 0
 }
-func (m *Model) clamp() { m.cursor = min(m.cursor, max(0, m.count()-1)) }
+func (m *Model) clamp() {
+	m.cursor = min(m.cursor, max(0, m.count()-1))
+	m.ensureListVisible()
+}
+
+func (m *Model) listPageSize() int {
+	reserved := 12
+	if m.tab == 7 {
+		reserved = 20
+	}
+	if m.err != "" || m.loading || m.status != "" {
+		reserved++
+	}
+	return max(1, m.h-reserved)
+}
+
+func (m *Model) ensureListVisible() {
+	total := m.count()
+	page := m.listPageSize()
+	if total <= page {
+		m.listOffset = 0
+		return
+	}
+	if m.cursor < m.listOffset {
+		m.listOffset = m.cursor
+	}
+	if m.cursor >= m.listOffset+page {
+		m.listOffset = m.cursor - page + 1
+	}
+	m.listOffset = min(max(0, m.listOffset), max(0, total-page))
+}
+
+func (m *Model) visibleRange(total int) (int, int) {
+	m.ensureListVisible()
+	start := min(m.listOffset, total)
+	return start, min(total, start+m.listPageSize())
+}
+
+func (m *Model) listProgress(start, end, total int) string {
+	if total <= m.listPageSize() {
+		return ""
+	}
+	return fmt.Sprintf("  ↑↓/PgUp/PgDn  %d–%d/%d\n", start+1, end, total)
+}
 func sanitize(s string) string {
 	return utils.Sanitize(s)
 }
@@ -802,6 +891,9 @@ func row(sel bool, s string) string {
 }
 
 func (m *Model) View() string {
+	if m.splash {
+		return m.splashView()
+	}
 	if m.w < 76 || m.h < 20 {
 		return "DockTop\n\n" + fmt.Sprintf(m.tr("minimum_terminal"), m.w, m.h)
 	}
@@ -911,7 +1003,10 @@ func (m *Model) dashboard() string {
 }
 func (m *Model) containers() string {
 	b := m.tr("containers_header") + "\n"
-	for i, x := range m.snap.Containers {
+	start, end := m.visibleRange(len(m.snap.Containers))
+	b += m.listProgress(start, end, len(m.snap.Containers))
+	for index, x := range m.snap.Containers[start:end] {
+		i := start + index
 		v := m.snap.Metrics[x.ID]
 		b += row(i == m.cursor, fmt.Sprintf("%-18.18s %-12.12s %-22.22s %-10s %6.1f%% %7s  %s", x.Name, x.ID, x.Image, m.trState(x.State), v.CPU, utils.Bytes(int64(v.MemoryBytes)), x.Status)) + "\n"
 	}
@@ -922,7 +1017,10 @@ func (m *Model) containers() string {
 }
 func (m *Model) images() string {
 	b := m.tr("images_header") + "\n"
-	for i, x := range m.snap.Images {
+	start, end := m.visibleRange(len(m.snap.Images))
+	b += m.listProgress(start, end, len(m.snap.Images))
+	for index, x := range m.snap.Images[start:end] {
+		i := start + index
 		b += row(i == m.cursor, fmt.Sprintf("%-43.43s %-12.12s %s", x.Tags, shortID(x.ID), utils.Bytes(x.Size))) + "\n"
 	}
 	if len(m.snap.Images) == 0 {
@@ -932,7 +1030,10 @@ func (m *Model) images() string {
 }
 func (m *Model) registry() string {
 	b := m.tr("registry_header") + "\n"
-	for i, x := range m.results {
+	start, end := m.visibleRange(len(m.results))
+	b += m.listProgress(start, end, len(m.results))
+	for index, x := range m.results[start:end] {
+		i := start + index
 		kind := m.tr("community")
 		if x.Official {
 			kind = m.tr("official")
@@ -946,14 +1047,20 @@ func (m *Model) registry() string {
 }
 func (m *Model) volumes() string {
 	b := m.tr("volumes_header") + "\n"
-	for i, x := range m.snap.Volumes {
+	start, end := m.visibleRange(len(m.snap.Volumes))
+	b += m.listProgress(start, end, len(m.snap.Volumes))
+	for index, x := range m.snap.Volumes[start:end] {
+		i := start + index
 		b += row(i == m.cursor, fmt.Sprintf("%-41.41s %-12s %s", x.Name, x.Driver, x.Scope)) + "\n"
 	}
 	return b + "\n  " + m.tr("volumes_hint")
 }
 func (m *Model) networks() string {
 	b := m.tr("networks_header") + "\n"
-	for i, x := range m.snap.Networks {
+	start, end := m.visibleRange(len(m.snap.Networks))
+	b += m.listProgress(start, end, len(m.snap.Networks))
+	for index, x := range m.snap.Networks[start:end] {
+		i := start + index
 		b += row(i == m.cursor, fmt.Sprintf("%-28.28s %-12.12s %-12s %s", x.Name, x.ID, x.Driver, x.Scope)) + "\n"
 	}
 	return b + "\n  " + m.tr("networks_hint")
@@ -978,7 +1085,10 @@ func (m *Model) swarmOverview() string {
 }
 func (m *Model) services() string {
 	b := m.tr("services_header") + "\n"
-	for i, x := range m.snap.Services {
+	start, end := m.visibleRange(len(m.snap.Services))
+	b += m.listProgress(start, end, len(m.snap.Services))
+	for index, x := range m.snap.Services[start:end] {
+		i := start + index
 		b += row(i == m.cursor, fmt.Sprintf("%-28.28s %-14.14s %-11s %4d/%-4d %-12s %.36s", x.Name, x.Stack, m.trState(x.Mode), x.Running, x.Desired, m.trState(x.Update), x.Image)) + "\n"
 	}
 	if len(m.snap.Services) == 0 {
@@ -1006,7 +1116,10 @@ func (m *Model) services() string {
 }
 func (m *Model) nodes() string {
 	b := m.tr("nodes_header") + "\n"
-	for i, x := range m.snap.Nodes {
+	start, end := m.visibleRange(len(m.snap.Nodes))
+	b += m.listProgress(start, end, len(m.snap.Nodes))
+	for index, x := range m.snap.Nodes[start:end] {
+		i := start + index
 		b += row(i == m.cursor, fmt.Sprintf("%-22.22s %-12.12s %-9s %-9s %-9s %-12s %3d  %8s  %s", x.Hostname, x.ID, m.trState(x.Role), m.trState(x.Availability), m.trState(x.State), m.trState(x.Manager), x.CPUs, utils.Bytes(x.Memory), x.Engine)) + "\n"
 	}
 	if len(m.snap.Nodes) == 0 {
@@ -1016,7 +1129,10 @@ func (m *Model) nodes() string {
 }
 func (m *Model) stacks() string {
 	b := m.tr("stacks_header") + "\n"
-	for i, x := range m.snap.Stacks {
+	start, end := m.visibleRange(len(m.snap.Stacks))
+	b += m.listProgress(start, end, len(m.snap.Stacks))
+	for index, x := range m.snap.Stacks[start:end] {
+		i := start + index
 		health := m.tr("healthy")
 		if x.Failed > 0 || x.Running < x.Desired {
 			health = m.tr("degraded")
@@ -1030,7 +1146,10 @@ func (m *Model) stacks() string {
 }
 func (m *Model) events() string {
 	b := m.tr("events_header") + "\n"
-	for i, x := range m.snap.Events {
+	start, end := m.visibleRange(len(m.snap.Events))
+	b += m.listProgress(start, end, len(m.snap.Events))
+	for index, x := range m.snap.Events[start:end] {
+		i := start + index
 		b += row(i == m.cursor, fmt.Sprintf("%-13s %-13s %-20.20s %-13.13s %s", x.Time.Format("15:04:05"), x.Type, x.Action, shortID(x.ID), x.Name)) + "\n"
 	}
 	if len(m.snap.Events) == 0 {
@@ -1040,7 +1159,10 @@ func (m *Model) events() string {
 }
 func (m *Model) auditView() string {
 	b := m.tr("audit_header") + "\n"
-	for i, x := range m.auditEntries {
+	start, end := m.visibleRange(len(m.auditEntries))
+	b += m.listProgress(start, end, len(m.auditEntries))
+	for index, x := range m.auditEntries[start:end] {
+		i := start + index
 		result := x.Result
 		if result == "erro" || result == "error" {
 			result = m.tr("error")

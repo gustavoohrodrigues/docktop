@@ -22,6 +22,52 @@ type Context struct {
 	Description string `yaml:"description,omitempty"`
 	TLS         TLS    `yaml:"tls"`
 }
+type Contexts map[string]Context
+
+// UnmarshalYAML accepts both the current map format and the legacy list format:
+//
+//	contexts:
+//	  local:
+//	    host: unix:///var/run/docker.sock
+//
+//	contexts:
+//	  - name: local
+//	    host: unix:///var/run/docker.sock
+func (c *Contexts) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.MappingNode:
+		var contexts map[string]Context
+		if err := value.Decode(&contexts); err != nil {
+			return err
+		}
+		*c = contexts
+		return nil
+	case yaml.SequenceNode:
+		contexts := make(map[string]Context, len(value.Content))
+		for index, item := range value.Content {
+			var named struct {
+				Name    string `yaml:"name"`
+				Context `yaml:",inline"`
+			}
+			if err := item.Decode(&named); err != nil {
+				return fmt.Errorf("contexts[%d]: %w", index, err)
+			}
+			name := strings.TrimSpace(named.Name)
+			if name == "" {
+				return fmt.Errorf("contexts[%d]: campo name é obrigatório", index)
+			}
+			if _, exists := contexts[name]; exists {
+				return fmt.Errorf("contexts[%d]: contexto %q duplicado", index, name)
+			}
+			contexts[name] = named.Context
+		}
+		*c = contexts
+		return nil
+	default:
+		return errors.New("contexts deve ser um mapa ou uma lista")
+	}
+}
+
 type Audit struct {
 	Enabled   bool   `yaml:"enabled"`
 	Path      string `yaml:"path,omitempty"`
@@ -52,26 +98,26 @@ type Shell struct {
 }
 type Timeouts struct{ Connect, Operation, Stream string }
 type Config struct {
-	DefaultContext   string             `yaml:"default_context"`
-	Contexts         map[string]Context `yaml:"contexts"`
-	RefreshInterval  time.Duration      `yaml:"-"`
-	Refresh          string             `yaml:"refresh_interval"`
-	ReadOnly         bool               `yaml:"read_only"`
-	Theme            string             `yaml:"theme"`
-	Language         string             `yaml:"language"`
-	MouseEnabled     bool               `yaml:"mouse_enabled"`
-	TelemetryEnabled bool               `yaml:"telemetry_enabled"`
-	Audit            Audit              `yaml:"audit"`
-	DangerousActions Dangerous          `yaml:"dangerous_actions"`
-	Registry         Registry           `yaml:"registry"`
-	UI               UI                 `yaml:"ui"`
-	Shell            Shell              `yaml:"shell"`
-	Timeouts         Timeouts           `yaml:"timeouts"`
-	Debug            bool               `yaml:"debug"`
+	DefaultContext   string        `yaml:"default_context"`
+	Contexts         Contexts      `yaml:"contexts"`
+	RefreshInterval  time.Duration `yaml:"-"`
+	Refresh          string        `yaml:"refresh_interval"`
+	ReadOnly         bool          `yaml:"read_only"`
+	Theme            string        `yaml:"theme"`
+	Language         string        `yaml:"language"`
+	MouseEnabled     bool          `yaml:"mouse_enabled"`
+	TelemetryEnabled bool          `yaml:"telemetry_enabled"`
+	Audit            Audit         `yaml:"audit"`
+	DangerousActions Dangerous     `yaml:"dangerous_actions"`
+	Registry         Registry      `yaml:"registry"`
+	UI               UI            `yaml:"ui"`
+	Shell            Shell         `yaml:"shell"`
+	Timeouts         Timeouts      `yaml:"timeouts"`
+	Debug            bool          `yaml:"debug"`
 }
 
 func Default() Config {
-	return Config{DefaultContext: "local", Contexts: map[string]Context{"local": {Host: "unix:///var/run/docker.sock"}}, Refresh: "3s", RefreshInterval: 3 * time.Second, Theme: "dark-ops", Language: "pt-BR", MouseEnabled: true, Audit: Audit{Enabled: true, MaxSizeMB: 10, Retention: 5}, DangerousActions: Dangerous{true, true, true, true, true, true}, Registry: Registry{HubURL: "https://hub.docker.com", PageSize: 25, TimeoutS: "10s", Timeout: 10 * time.Second}, UI: UI{CompactWidth: 76, RecommendedWidth: 120}, Shell: Shell{Candidates: []string{"/bin/bash", "/bin/sh", "bash", "sh", "ash"}, EscapeKey: "ctrl+]"}, Timeouts: Timeouts{Connect: "8s", Operation: "35s", Stream: "30m"}}
+	return Config{DefaultContext: "local", Contexts: Contexts{"local": {Host: "unix:///var/run/docker.sock"}}, Refresh: "3s", RefreshInterval: 3 * time.Second, Theme: "dark-ops", Language: "pt-BR", MouseEnabled: true, Audit: Audit{Enabled: true, MaxSizeMB: 10, Retention: 5}, DangerousActions: Dangerous{true, true, true, true, true, true}, Registry: Registry{HubURL: "https://hub.docker.com", PageSize: 25, TimeoutS: "10s", Timeout: 10 * time.Second}, UI: UI{CompactWidth: 76, RecommendedWidth: 120}, Shell: Shell{Candidates: []string{"/bin/bash", "/bin/sh", "bash", "sh", "ash"}, EscapeKey: "ctrl+]"}, Timeouts: Timeouts{Connect: "8s", Operation: "35s", Stream: "30m"}}
 }
 func Path() string { d, _ := os.UserConfigDir(); return filepath.Join(d, "docktop", "config.yaml") }
 func Load(path string) (Config, error) {

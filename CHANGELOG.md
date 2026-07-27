@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0 - 2026-07-27
+
+- Adiciona splash animada e localizada na inicialização.
+- Adiciona viewport com rolagem para listas extensas de containers, imagens, registry, volumes, redes, serviços, nodes, stacks, events e auditoria.
+- Adiciona navegação por `PgUp`/`PgDn`, `Ctrl+U`/`Ctrl+D`, `g`/`G` e roda do mouse, mantendo a seleção visível.
+- Aceita `contexts` no YAML tanto como mapa quanto como lista nomeada, preservando compatibilidade com configurações antigas.
+
 ## 0.2.1 - 2026-07-21
 
 - Corrige mapeamento `snake_case` da pesquisa real do Docker Hub.

@@ -21,6 +21,40 @@ func TestLoad(t *testing.T) {
 		t.Fatalf("config inesperada: %#v", c)
 	}
 }
+
+func TestLoadContextsAsList(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "list.yaml")
+	data := `default_context: remote
+contexts:
+  - name: local
+    host: unix:///var/run/docker.sock
+  - name: remote
+    host: tcp://docker.example.test:2376
+    description: Ambiente remoto
+refresh_interval: 3s
+`
+	if err := os.WriteFile(p, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Contexts["remote"].Host != "tcp://docker.example.test:2376" {
+		t.Fatalf("contexto de lista não carregado: %#v", c.Contexts)
+	}
+}
+
+func TestRejectUnnamedContextInList(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "unnamed.yaml")
+	data := "default_context: local\ncontexts:\n  - host: unix:///var/run/docker.sock\n"
+	if err := os.WriteFile(p, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(p); err == nil {
+		t.Fatal("esperava erro para contexto sem name")
+	}
+}
 func TestRejectFastRefresh(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "c.yaml")
 	_ = os.WriteFile(p, []byte("default_context: x\ncontexts: {x: {host: unix:///x}}\nrefresh_interval: 10ms\n"), 0600)

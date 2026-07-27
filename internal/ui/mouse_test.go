@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -37,6 +38,59 @@ func TestMouseSelectsContainerRowAndWheel(t *testing.T) {
 	model, _ = m.updateMouse(tea.MouseMsg{Button: tea.MouseButtonWheelUp, Action: tea.MouseActionPress})
 	if model.(*Model).cursor != 0 {
 		t.Fatalf("wheel não moveu seleção: %d", model.(*Model).cursor)
+	}
+}
+
+func TestLongContainerListKeepsSelectionVisible(t *testing.T) {
+	containers := make([]docker.Container, 30)
+	for i := range containers {
+		containers[i].Name = fmt.Sprintf("container-%02d", i)
+	}
+	m := &Model{
+		w:    100,
+		h:    20,
+		tab:  1,
+		snap: docker.Snapshot{Containers: containers},
+	}
+
+	model, _ := m.updateKeys(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")})
+	got := model.(*Model)
+	if got.cursor != 29 || got.listOffset == 0 {
+		t.Fatalf("fim da lista não ficou visível: cursor=%d offset=%d", got.cursor, got.listOffset)
+	}
+	view := got.containers()
+	if !strings.Contains(view, "container-29") || strings.Contains(view, "container-00") {
+		t.Fatalf("viewport incorreta no fim da lista: %s", view)
+	}
+	if !strings.Contains(view, "30/30") {
+		t.Fatalf("progresso da lista ausente: %s", view)
+	}
+}
+
+func TestPageNavigationAndMouseUseListOffset(t *testing.T) {
+	containers := make([]docker.Container, 30)
+	for i := range containers {
+		containers[i].Name = fmt.Sprintf("container-%02d", i)
+	}
+	m := &Model{
+		w:          100,
+		h:          20,
+		tab:        1,
+		cursor:     20,
+		listOffset: 18,
+		snap:       docker.Snapshot{Containers: containers},
+	}
+
+	model, _ := m.updateKeys(tea.KeyMsg{Type: tea.KeyPgDown})
+	got := model.(*Model)
+	if got.cursor != 28 || got.listOffset == 18 {
+		t.Fatalf("PgDn não rolou a viewport: cursor=%d offset=%d", got.cursor, got.listOffset)
+	}
+
+	model, _ = got.updateMouse(tea.MouseMsg{X: 5, Y: 6, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+	got = model.(*Model)
+	if got.cursor != got.listOffset+1 {
+		t.Fatalf("clique não considerou offset: cursor=%d offset=%d", got.cursor, got.listOffset)
 	}
 }
 

@@ -7,6 +7,8 @@ ATALHOS DO DOCKTOP
   Tab/Shift+Tab próxima/anterior aba
   ←/→           navega entre módulos
   j/k ou ↑/↓    move a seleção
+  PgUp/PgDn     rola uma página
+  Ctrl+U/Ctrl+D rola uma página
   g/G           primeiro/último item
   r             atualiza a tela atual
   R             liga/desliga atualização automática
@@ -147,6 +149,8 @@ GLOBAL SHORTCUTS
   Tab/Shift+Tab next/previous tab
   ←/→           navigate modules
   j/k or ↑/↓    move selection
+  PgUp/PgDn     scroll one page
+  Ctrl+U/Ctrl+D scroll one page
   g/G           first/last item
   r             refresh current screen
   R             toggle automatic refresh
@@ -189,6 +193,8 @@ ATAJOS GLOBALES
   Tab/Shift+Tab pestaña siguiente/anterior
   ←/→           navega entre módulos
   j/k o ↑/↓     mueve la selección
+  PgUp/PgDn     desplaza una página
+  Ctrl+U/Ctrl+D desplaza una página
   g/G           primer/último elemento
   r             actualiza la pantalla actual
   R             activa/desactiva actualización automática
