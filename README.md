@@ -495,6 +495,6 @@ Distribuído sob a licença [MIT](LICENSE).
 
 [**docktop.dev**](https://docktop.dev/) • [**GitHub**](https://github.com/gustavoohrodrigues/docktop)
 
-Feito com 🐳 pela equipe [**Orqly**](https://www.linkedin.com/company/orqly/).
+By [**Orqly**](https://www.linkedin.com/company/orqly/).
 
 </div>
