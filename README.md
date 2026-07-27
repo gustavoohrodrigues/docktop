@@ -424,14 +424,9 @@ Quando as contribuições externas estiverem abertas:
 ### Publicação de versões
 
 O workflow `.github/workflows/release.yml` automatiza a publicação. Para
-permitir a sincronização dos binários com o site, configure no repositório
-oficial o secret `WEBSITE_REPO_TOKEN` com um fine-grained personal access token
-que tenha acesso somente ao repositório `docktop-website` e permissão
-**Contents: Read and write**.
-
-Se o projeto da Vercel não estiver integrado ao branch `main` do site,
-adicione também o secret opcional `VERCEL_DEPLOY_HOOK_URL`, contendo uma
-[Deploy Hook](https://vercel.com/docs/deploy-hooks) de produção.
+reduzir riscos de cadeia de suprimentos, as actions usadas estão fixadas por
+commit e o pipeline opera com permissões explícitas. Os binários recebem
+atestação de procedência e são publicados com checksums SHA-256.
 
 Depois, crie e envie uma tag semântica:
 
@@ -441,8 +436,9 @@ git push origin v0.3.1
 ```
 
 O workflow testa o código, compila Linux `amd64` e `arm64`, publica a GitHub
-Release, atualiza os downloads e o manifesto do site. Também pode ser executado
-manualmente pela aba Actions, informando a versão sem o prefixo `v`.
+Release e seu manifesto. O instalador do site consome a release oficial
+diretamente, sem tokens entre repositórios. O workflow também pode ser
+executado manualmente pela aba Actions, informando a versão sem o prefixo `v`.
 
 ## Equipe
 

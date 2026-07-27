@@ -1,8 +1,8 @@
 # Changelog
 
 Tags no formato `vX.Y.Z` executam os testes, compilam os binários Linux
-`amd64` e `arm64`, geram um manifesto SHA-256, publicam uma GitHub Release e
-sincronizam os downloads consumidos pelo instalador oficial.
+`amd64` e `arm64`, geram um manifesto SHA-256, atestam a procedência dos
+artefatos e publicam uma GitHub Release consumida pelo instalador oficial.
 
 ## 0.3.0 - 2026-07-27
 
