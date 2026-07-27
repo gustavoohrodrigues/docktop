@@ -6,44 +6,74 @@
 
 ### Docker e Docker Swarm, direto do terminal.
 
-Uma TUI em Go para acompanhar e operar ambientes Docker sem precisar alternar entre dezenas de comandos.
+Uma TUI rápida e segura, escrita em Go, para observar e operar ambientes Docker  
+sem sair do terminal — do container local ao cluster Swarm.
 
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev/)
 [![Linux](https://img.shields.io/badge/Linux-amd64%20%7C%20arm64-FCC624?style=flat-square&logo=linux&logoColor=black)](#compatibilidade)
-[![License](https://img.shields.io/badge/license-MIT-56F39A?style=flat-square)](LICENSE)
+[![Docker](https://img.shields.io/badge/Docker-Engine%20%7C%20Swarm-2496ED?style=flat-square&logo=docker&logoColor=white)](#docker-swarm)
+[![Status](https://img.shields.io/badge/status-em%20produ%C3%A7%C3%A3o-22C55E?style=flat-square)](#status-do-projeto)
+[![License](https://img.shields.io/badge/licen%C3%A7a-MIT-56F39A?style=flat-square)](LICENSE)
+
+[Visão geral](#visão-geral) •
+[Funcionalidades](#funcionalidades) •
+[Instalação](#instalação) •
+[Uso](#uso) •
+[Configuração](#configuração) •
+[Equipe](#equipe)
 
 </div>
 
 ---
 
-## Sobre o projeto
+## Visão geral
 
-O DockTop nasceu para facilitar o trabalho de quem administra Docker em servidores Linux e prefere continuar no terminal. Ele conversa com o Docker Engine pela API, organiza os recursos em telas navegáveis e adiciona proteções para operações que podem causar indisponibilidade ou perda de dados.
+O **DockTop** simplifica a rotina de quem administra Docker em servidores Linux e prefere continuar no terminal. Ele se conecta diretamente à API do Docker Engine, organiza os recursos em telas navegáveis e oferece proteções para operações que podem causar indisponibilidade ou perda de dados.
 
-Não há servidor web, banco de dados ou agente instalado no host. O DockTop é um binário único que se conecta ao socket local ou a um daemon remoto.
+Não há servidor web, banco de dados ou agente adicional instalado no host. O DockTop é distribuído como um único binário e pode se conectar tanto ao socket Docker local quanto a um daemon remoto.
+
+### Por que usar o DockTop?
+
+- **Tudo em um só lugar:** containers, imagens, volumes, redes, eventos e recursos Swarm.
+- **Operação mais segura:** modo somente leitura, confirmações e auditoria local.
+- **Feito para servidores:** interface leve, responsiva e adaptada a terminais menores.
+- **Sem infraestrutura extra:** basta o binário e acesso ao Docker Engine.
+- **Pronto para diferentes ambientes:** Docker standalone, Swarm worker e Swarm manager.
+- **Experiência localizada:** Português do Brasil, Inglês e Espanhol.
+
+## Status do projeto
+
+O DockTop está **em produção** e continua em evolução ativa.
 
 > [!IMPORTANT]
-> O projeto está em desenvolvimento ativo. Consulte [Limitações atuais](#limitações-atuais) antes de utilizá-lo em produção.
+> Antes de usar operações de escrita em ambientes críticos, conheça as
+> [limitações atuais](#limitações-atuais) e considere iniciar com `--read-only`.
 
-## O que já funciona
+## Funcionalidades
 
-- Dashboard com informações do Engine, uso de CPU, memória e resumo dos recursos.
-- Containers com métricas, criação, start, stop, restart, pause e remoção.
-- Atualização da imagem de um container com recriação e rollback.
-- Logs, inspect, processos e shell interativo.
-- Imagens locais e pull com progresso pela API do Docker.
-- Pesquisa de imagens no Docker Hub.
-- Criação e remoção de volumes e redes.
-- Detecção automática de Docker standalone, Swarm worker e Swarm manager.
-- Serviços e tasks Swarm, incluindo inspect e scale de serviços replicated.
-- Nodes Swarm com inspect e alteração de availability.
-- Stacks agrupadas por `com.docker.stack.namespace`.
-- Eventos recentes do Docker Engine.
-- Auditoria local em JSONL, com sanitização, rotação e permissões restritas.
-- Modo somente leitura para ambientes sensíveis.
-- Temas persistentes e interface adaptada a terminais menores.
-- Interface em Português do Brasil, Inglês e Espanhol.
-- Navegação por teclado e suporte opcional a mouse.
+| Área | Recursos |
+|---|---|
+| **Dashboard** | Informações do Engine, uso de CPU e memória e resumo dos recursos |
+| **Containers** | Métricas, criação, start, stop, restart, pause e remoção |
+| **Atualizações** | Atualização de imagem com recriação do container e rollback |
+| **Diagnóstico** | Logs, inspect, processos e shell interativo |
+| **Imagens** | Listagem local, pull com progresso e pesquisa no Docker Hub |
+| **Storage e rede** | Criação e remoção de volumes e redes |
+| **Docker Swarm** | Serviços, tasks, nodes, stacks e scale de serviços replicated |
+| **Eventos** | Visualização dos eventos recentes do Docker Engine |
+| **Segurança** | Modo somente leitura, confirmações e proteção de ações perigosas |
+| **Auditoria** | Registro local em JSONL, sanitização, rotação e permissões restritas |
+| **Experiência** | Temas persistentes, i18n, teclado e suporte opcional a mouse |
+
+### Detecção automática do ambiente
+
+O DockTop identifica automaticamente o tipo de endpoint conectado:
+
+- Docker standalone;
+- Swarm worker;
+- Swarm manager.
+
+A interface disponibiliza apenas as operações compatíveis com o ambiente e com as permissões do endpoint atual.
 
 ## Instalação
 
@@ -54,9 +84,11 @@ Não há servidor web, banco de dados ou agente instalado no host. O DockTop é 
 ```bash
 git clone https://github.com/gustavoohrodrigues/docktop.git
 cd docktop
+
 go mod tidy
 go test ./...
 go build -o docktop ./cmd/docktop
+
 ./docktop
 ```
 
@@ -70,7 +102,7 @@ docktop --version
 ### Dependências de compilação
 
 <details>
-<summary>Ubuntu / Debian</summary>
+<summary><strong>Ubuntu / Debian</strong></summary>
 
 ```bash
 sudo apt update
@@ -80,7 +112,7 @@ sudo apt install golang-go make git
 </details>
 
 <details>
-<summary>Fedora</summary>
+<summary><strong>Fedora</strong></summary>
 
 ```bash
 sudo dnf install golang make git
@@ -89,7 +121,7 @@ sudo dnf install golang make git
 </details>
 
 <details>
-<summary>RHEL / Rocky Linux / AlmaLinux</summary>
+<summary><strong>RHEL / Rocky Linux / AlmaLinux</strong></summary>
 
 ```bash
 sudo dnf install golang make git
@@ -97,23 +129,21 @@ sudo dnf install golang make git
 
 </details>
 
-> Binários para Linux amd64 e arm64 serão disponibilizados em GitHub Releases quando a primeira versão pública for publicada.
-
 ## Primeiro uso
 
-O contexto padrão usa o socket local:
+Por padrão, o DockTop usa o socket local:
 
 ```text
 unix:///var/run/docker.sock
 ```
 
-O usuário precisa ter permissão para acessar esse socket. Normalmente isso é feito por associação ao grupo `docker`:
+O usuário precisa ter permissão para acessar esse socket. Normalmente, isso é feito por meio do grupo `docker`:
 
 ```bash
 sudo usermod -aG docker "$USER"
 ```
 
-Depois da alteração, encerre a sessão e entre novamente. Confirme o acesso antes de iniciar o DockTop:
+Depois da alteração, encerre a sessão e entre novamente. Confirme o acesso antes de iniciar:
 
 ```bash
 docker info
@@ -121,30 +151,31 @@ docktop
 ```
 
 > [!WARNING]
-> O grupo `docker` concede, na prática, privilégios equivalentes a root no host. Não adicione usuários ao grupo sem compreender esse impacto.
+> O grupo `docker` concede, na prática, privilégios equivalentes a root no host.
+> Não adicione usuários ao grupo sem compreender esse impacto.
 
 ## Uso
 
 ```bash
-# Contexto padrão
+# Iniciar com o contexto padrão
 docktop
 
 # Impedir qualquer mutação
 docktop --read-only
 
-# Escolher contexto, tema e idioma
+# Escolher contexto, tema ou idioma
 docktop --context production-manager
 docktop --theme nord
 docktop --language en-US
 
-# Usar configuração alternativa
+# Usar um arquivo de configuração alternativo
 docktop --config /etc/docktop/config.yaml
 
-# Desabilitar mouse
+# Desabilitar o mouse
 docktop --no-mouse
 ```
 
-Todas as opções:
+Para consultar todas as opções:
 
 ```bash
 docktop --help
@@ -154,32 +185,32 @@ docktop --help
 
 | Tecla | Ação |
 |---|---|
-| `Tab` / `Shift+Tab` | Próxima ou anterior área |
+| `Tab` / `Shift+Tab` | Ir para a próxima área ou voltar à anterior |
 | `←` / `→` | Navegar entre módulos |
 | `↑` / `↓` ou `j` / `k` | Navegar em listas |
 | `Enter` | Abrir detalhes ou confirmar |
 | `Esc` | Fechar modal ou retornar |
-| `/` | Pesquisa contextual |
+| `/` | Iniciar pesquisa contextual |
 | `r` | Atualizar a tela atual |
-| `R` | Ligar ou desligar auto-refresh |
-| `x` | Reiniciar container selecionado |
-| `u` | Atualizar imagem do container |
-| `t` | Trocar tema |
-| `L` | Escolher idioma em Settings |
-| `?` / `F1` | Abrir ajuda |
+| `R` | Ligar ou desligar o auto-refresh |
+| `x` | Reiniciar o container selecionado |
+| `u` | Atualizar a imagem do container |
+| `t` | Trocar o tema |
+| `L` | Escolher o idioma em Settings |
+| `?` / `F1` | Abrir a ajuda |
 | `q` | Sair |
 
-Os atalhos disponíveis para cada recurso também aparecem no rodapé da aplicação.
+Os atalhos disponíveis em cada contexto também aparecem no rodapé da aplicação.
 
 ## Configuração
 
-O arquivo padrão fica em:
+O arquivo de configuração padrão fica em:
 
 ```text
 ~/.config/docktop/config.yaml
 ```
 
-Use [config.example.yaml](config.example.yaml) como ponto de partida.
+Use o arquivo [config.example.yaml](config.example.yaml) como ponto de partida.
 
 ### Socket local
 
@@ -218,51 +249,53 @@ O DockTop também respeita `DOCKER_HOST`, `DOCKER_CONTEXT` e `DOCKER_TLS_VERIFY`
 
 ## Docker Swarm
 
-O comportamento depende do endpoint conectado:
+O comportamento do DockTop se adapta ao endpoint conectado:
 
 | Endpoint | Comportamento |
 |---|---|
-| Standalone | Recursos locais do Docker Engine |
-| Swarm worker | Recursos locais e explicação das limitações do cluster |
-| Swarm manager | Serviços, tasks, nodes, stacks e operações do plano de controle |
+| **Standalone** | Exibe e opera os recursos locais do Docker Engine |
+| **Swarm worker** | Exibe recursos locais e informa as limitações de acesso ao cluster |
+| **Swarm manager** | Disponibiliza serviços, tasks, nodes, stacks e operações do plano de controle |
 
-Alterações em nodes e outras ações sensíveis respeitam `--read-only`, a política de ações perigosas e confirmações digitadas.
+Alterações em nodes e outras ações sensíveis respeitam o modo `--read-only`, a política de ações perigosas e as confirmações digitadas.
 
 ## Segurança e auditoria
 
-- `--read-only` impede operações de escrita.
-- Remoções e mudanças críticas exigem confirmação.
-- Variáveis com nomes como `password`, `token`, `secret`, `key` e `credential` são mascaradas.
-- Credenciais TLS não são exibidas ou gravadas na auditoria.
-- O histórico padrão fica em `~/.local/share/docktop/audit.jsonl`.
-- Arquivos de auditoria usam permissão `0600` e diretórios usam `0700`.
-- Rotação e retenção são configuráveis.
+Segurança operacional faz parte do fluxo da aplicação:
+
+- `--read-only` bloqueia operações de escrita;
+- remoções e mudanças críticas exigem confirmação;
+- variáveis com nomes como `password`, `token`, `secret`, `key` e `credential` são mascaradas;
+- credenciais TLS não são exibidas nem gravadas na auditoria;
+- o histórico padrão fica em `~/.local/share/docktop/audit.jsonl`;
+- arquivos de auditoria usam permissão `0600` e diretórios usam `0700`;
+- rotação e retenção dos registros são configuráveis.
 
 ## Arquitetura
 
 ```text
 cmd/docktop          CLI e ciclo de vida
-internal/app         composição da aplicação
-internal/config      configuração e contextos
-internal/docker      integração com Docker Engine
-internal/i18n        traduções e localização de erros
-internal/jobs        operações em background
-internal/audit       auditoria local
-internal/registry    integração com registries
-internal/theme       temas e cores semânticas
-internal/ui          estado e renderização Bubble Tea
-internal/utils       utilidades e sanitização
-data/themes          temas distribuídos com o projeto
-docs/assets          recursos usados pela documentação
+internal/app         Composição da aplicação
+internal/config      Configuração e contextos
+internal/docker      Integração com Docker Engine
+internal/i18n        Traduções e localização de erros
+internal/jobs        Operações em background
+internal/audit       Auditoria local
+internal/registry    Integração com registries
+internal/theme       Temas e cores semânticas
+internal/ui          Estado e renderização Bubble Tea
+internal/utils       Utilidades e sanitização
+data/themes          Temas distribuídos com o projeto
+docs/assets          Recursos usados pela documentação
 ```
 
-O fluxo principal é:
+Fluxo principal:
 
 ```text
 Bubble Tea UI → interface Engine → Docker SDK → Docker Engine
 ```
 
-A interface do Engine mantém a camada visual desacoplada do SDK e permite testes sem colocar mocks no fluxo de produção.
+A interface do Engine mantém a camada visual desacoplada do SDK e permite testes sem inserir mocks no fluxo de produção.
 
 ## Desenvolvimento
 
@@ -293,11 +326,11 @@ make run
 
 ## Compatibilidade
 
-- Linux amd64.
-- Linux arm64.
-- Docker Engine por socket Unix.
-- Docker Engine remoto por TCP/TLS.
-- Docker standalone.
+- Linux amd64;
+- Linux arm64;
+- Docker Engine por socket Unix;
+- Docker Engine remoto por TCP/TLS;
+- Docker standalone;
 - Docker Swarm worker e manager.
 
 ## Limitações atuais
@@ -307,13 +340,13 @@ make run
 - Update avançado, rollback e remoção de serviços Swarm ainda não estão expostos.
 - Promote e demote de managers ainda não estão disponíveis na TUI.
 - Stacks são agrupadas e inspecionadas, mas deploy e remoção ainda não estão implementados.
-- Events utiliza uma janela recente em vez de um stream persistente.
+- Events usa uma janela recente em vez de um stream persistente.
 - Alguns textos livres retornados pelo daemon, logs e labels permanecem no idioma original da fonte.
 
 ## Solução de problemas
 
 <details>
-<summary>Permissão negada no socket Docker</summary>
+<summary><strong>Permissão negada no socket Docker</strong></summary>
 
 Confira o usuário, os grupos e as permissões:
 
@@ -326,7 +359,7 @@ docker info
 </details>
 
 <details>
-<summary>Docker daemon indisponível</summary>
+<summary><strong>Docker daemon indisponível</strong></summary>
 
 ```bash
 sudo systemctl status docker
@@ -336,9 +369,9 @@ sudo systemctl start docker
 </details>
 
 <details>
-<summary>Falha no contexto remoto TLS</summary>
+<summary><strong>Falha no contexto remoto TLS</strong></summary>
 
-Verifique nomes DNS, validade da CA, certificado do cliente, chave privada e permissões dos arquivos. Confirme também se o daemon escuta no endpoint configurado.
+Verifique os nomes DNS, a validade da CA, o certificado do cliente, a chave privada e as permissões dos arquivos. Confirme também se o daemon está escutando no endpoint configurado.
 
 </details>
 
@@ -346,11 +379,72 @@ Verifique nomes DNS, validade da CA, certificado do cliente, chave privada e per
 
 Issues, discussões e pull requests são bem-vindos. Antes de enviar uma mudança:
 
-1. Descreva claramente o problema ou comportamento desejado.
+1. Descreva claramente o problema ou o comportamento desejado.
 2. Mantenha operações Docker fora da camada de UI.
 3. Adicione testes para regras de negócio e parsing.
 4. Execute `go test ./...` e `go build ./cmd/docktop`.
 5. Não adicione mocks ou ações decorativas ao fluxo de produção.
+
+## Equipe
+
+<div align="center">
+
+<a href="https://github.com/orqly">
+  <img src="https://github.com/orqly.png?size=320" width="300" alt="Logo da Orqly">
+</a>
+
+<br>
+
+Um projeto da [**Orqly**](https://www.linkedin.com/company/orqly/), desenvolvido por:
+
+[GitHub ↗](https://github.com/orqly) • [LinkedIn ↗](https://www.linkedin.com/company/orqly/)
+
+</div>
+
+<table>
+  <tr>
+    <td align="center">
+      <a href="https://github.com/EmanuelSena101">
+        <img src="https://github.com/EmanuelSena101.png?size=320" width="110" alt="Foto de perfil de Emanuel Sena">
+      </a><br>
+      <strong>Emanuel Sena</strong><br>
+      <a href="https://github.com/EmanuelSena101">@EmanuelSena101</a><br>
+      <a href="https://www.linkedin.com/in/emanuel-sena/">LinkedIn ↗</a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/otaviozin">
+        <img src="https://github.com/otaviozin.png?size=320" width="110" alt="Foto de perfil de Otávio">
+      </a><br>
+      <strong>Otávio</strong><br>
+      <a href="https://github.com/otaviozin">@otaviozin</a><br>
+      <a href="https://www.linkedin.com/in/otavio-ppereira/">LinkedIn ↗</a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/Lucas-V-Roveri">
+        <img src="https://github.com/Lucas-V-Roveri.png?size=320" width="110" alt="Foto de perfil de Lucas Roveri">
+      </a><br>
+      <strong>Lucas Roveri</strong><br>
+      <a href="https://github.com/Lucas-V-Roveri">@Lucas-V-Roveri</a><br>
+      <a href="https://www.linkedin.com/in/lucas-vilela-roveri-dev/">LinkedIn ↗</a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/gustavoohrodrigues">
+        <img src="https://github.com/gustavoohrodrigues.png?size=320" width="110" alt="Foto de perfil de Gustavo Rodrigues">
+      </a><br>
+      <strong>Gustavo Rodrigues</strong><br>
+      <a href="https://github.com/gustavoohrodrigues">@gustavoohrodrigues</a><br>
+      <a href="https://www.linkedin.com/in/gustavo-henrique-rodrigues-3070a5260">LinkedIn ↗</a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/matjsz">
+        <img src="https://github.com/matjsz.png?size=320" width="110" alt="Foto de perfil de Matheus Silva">
+      </a><br>
+      <strong>Matheus Silva</strong><br>
+      <a href="https://github.com/matjsz">@matjsz</a><br>
+      <a href="https://www.linkedin.com/in/matjsilva/">LinkedIn ↗</a>
+    </td>
+  </tr>
+</table>
 
 ## Licença
 
@@ -360,6 +454,6 @@ Distribuído sob a licença [MIT](LICENSE).
 
 <div align="center">
 
-By [Orqly](https://github.com/orqly).
+Feito com 🐳 pela equipe [**Orqly**](https://www.linkedin.com/company/orqly/).
 
 </div>
