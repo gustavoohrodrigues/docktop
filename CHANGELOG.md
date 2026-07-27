@@ -4,6 +4,13 @@ Tags no formato `vX.Y.Z` executam os testes, compilam os binários Linux
 `amd64` e `arm64`, geram um manifesto SHA-256, atestam a procedência dos
 artefatos e publicam uma GitHub Release consumida pelo instalador oficial.
 
+## 0.3.1 - 2026-07-27
+
+- Endurece o pipeline com permissões explícitas e actions fixadas por commit.
+- Adiciona atestação de procedência aos binários publicados.
+- Permite que o instalador consuma releases públicas sem credenciais entre
+  repositórios.
+
 ## 0.3.0 - 2026-07-27
 
 - Adiciona splash animada e localizada na inicialização.
