@@ -15,6 +15,11 @@ sem sair do terminal — do container local ao cluster Swarm.
 [![Status](https://img.shields.io/badge/status-em%20produ%C3%A7%C3%A3o-22C55E?style=flat-square)](#status-do-projeto)
 [![License](https://img.shields.io/badge/licen%C3%A7a-MIT-56F39A?style=flat-square)](LICENSE)
 
+[**Site oficial ↗**](https://docktop.dev/) •
+[**Documentação ↗**](https://docktop.dev/#docs) •
+[**Instalar ↗**](https://docktop.dev/#install) •
+[**GitHub ↗**](https://github.com/gustavoohrodrigues/docktop)
+
 [Visão geral](#visão-geral) •
 [Funcionalidades](#funcionalidades) •
 [Instalação](#instalação) •
@@ -76,6 +81,33 @@ O DockTop identifica automaticamente o tipo de endpoint conectado:
 A interface disponibiliza apenas as operações compatíveis com o ambiente e com as permissões do endpoint atual.
 
 ## Instalação
+
+### Instalação rápida
+
+O instalador oficial detecta automaticamente a arquitetura do sistema e instala o binário correto para Linux `amd64` ou `arm64`:
+
+```bash
+curl -fsSL https://docktop.dev/docktop.sh | sh
+```
+
+Por padrão, o DockTop é instalado em `~/.local/bin/docktop`. Caso o diretório ainda não esteja no `PATH`, o instalador configura o perfil do shell e orienta a abertura de um novo terminal.
+
+Para instalações não interativas:
+
+```bash
+curl -fsSL https://docktop.dev/docktop.sh | DOCKTOP_YES=1 sh
+```
+
+> [!TIP]
+> Se preferir revisar o instalador antes de executá-lo:
+>
+> ```bash
+> curl -fsSL https://docktop.dev/docktop.sh -o docktop.sh
+> less docktop.sh
+> sh docktop.sh
+> ```
+
+Consulte também a página de [instalação no site oficial](https://docktop.dev/#install).
 
 ### Compilação manual
 
@@ -377,7 +409,9 @@ Verifique os nomes DNS, a validade da CA, o certificado do cliente, a chave priv
 
 ## Contribuindo
 
-Issues, discussões e pull requests são bem-vindos. Antes de enviar uma mudança:
+O DockTop será aberto para novas contribuições. Acompanhe o projeto e as novidades pelo [GitHub](https://github.com/gustavoohrodrigues/docktop).
+
+Quando as contribuições externas estiverem abertas:
 
 1. Descreva claramente o problema ou o comportamento desejado.
 2. Mantenha operações Docker fora da camada de UI.
@@ -407,6 +441,7 @@ Um projeto da [**Orqly**](https://www.linkedin.com/company/orqly/), desenvolvido
       <a href="https://github.com/EmanuelSena101">
         <img src="https://github.com/EmanuelSena101.png?size=320" width="110" alt="Foto de perfil de Emanuel Sena">
       </a><br>
+      <sub><strong>CONTRIBUIDOR</strong></sub><br>
       <strong>Emanuel Sena</strong><br>
       <a href="https://github.com/EmanuelSena101">@EmanuelSena101</a><br>
       <a href="https://www.linkedin.com/in/emanuel-sena/">LinkedIn ↗</a>
@@ -415,6 +450,7 @@ Um projeto da [**Orqly**](https://www.linkedin.com/company/orqly/), desenvolvido
       <a href="https://github.com/otaviozin">
         <img src="https://github.com/otaviozin.png?size=320" width="110" alt="Foto de perfil de Otávio">
       </a><br>
+      <sub><strong>CONTRIBUIDOR</strong></sub><br>
       <strong>Otávio</strong><br>
       <a href="https://github.com/otaviozin">@otaviozin</a><br>
       <a href="https://www.linkedin.com/in/otavio-ppereira/">LinkedIn ↗</a>
@@ -423,6 +459,7 @@ Um projeto da [**Orqly**](https://www.linkedin.com/company/orqly/), desenvolvido
       <a href="https://github.com/Lucas-V-Roveri">
         <img src="https://github.com/Lucas-V-Roveri.png?size=320" width="110" alt="Foto de perfil de Lucas Roveri">
       </a><br>
+      <sub><strong>CONTRIBUIDOR</strong></sub><br>
       <strong>Lucas Roveri</strong><br>
       <a href="https://github.com/Lucas-V-Roveri">@Lucas-V-Roveri</a><br>
       <a href="https://www.linkedin.com/in/lucas-vilela-roveri-dev/">LinkedIn ↗</a>
@@ -431,6 +468,7 @@ Um projeto da [**Orqly**](https://www.linkedin.com/company/orqly/), desenvolvido
       <a href="https://github.com/gustavoohrodrigues">
         <img src="https://github.com/gustavoohrodrigues.png?size=320" width="110" alt="Foto de perfil de Gustavo Rodrigues">
       </a><br>
+      <sub><strong>CRIADOR E MANTENEDOR</strong></sub><br>
       <strong>Gustavo Rodrigues</strong><br>
       <a href="https://github.com/gustavoohrodrigues">@gustavoohrodrigues</a><br>
       <a href="https://www.linkedin.com/in/gustavo-henrique-rodrigues-3070a5260">LinkedIn ↗</a>
@@ -439,6 +477,7 @@ Um projeto da [**Orqly**](https://www.linkedin.com/company/orqly/), desenvolvido
       <a href="https://github.com/matjsz">
         <img src="https://github.com/matjsz.png?size=320" width="110" alt="Foto de perfil de Matheus Silva">
       </a><br>
+      <sub><strong>CONTRIBUIDOR</strong></sub><br>
       <strong>Matheus Silva</strong><br>
       <a href="https://github.com/matjsz">@matjsz</a><br>
       <a href="https://www.linkedin.com/in/matjsilva/">LinkedIn ↗</a>
@@ -453,6 +492,8 @@ Distribuído sob a licença [MIT](LICENSE).
 ---
 
 <div align="center">
+
+[**docktop.dev**](https://docktop.dev/) • [**GitHub**](https://github.com/gustavoohrodrigues/docktop)
 
 Feito com 🐳 pela equipe [**Orqly**](https://www.linkedin.com/company/orqly/).
 
