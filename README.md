@@ -437,8 +437,12 @@ git push origin v0.3.1
 
 O workflow testa o código, compila Linux `amd64` e `arm64`, publica a GitHub
 Release e seu manifesto. O instalador do site consome a release oficial
-diretamente, sem tokens entre repositórios. O workflow também pode ser
-executado manualmente pela aba Actions, informando a versão sem o prefixo `v`.
+diretamente, sem tokens entre repositórios. Releases existentes não são
+sobrescritas.
+
+CodeQL, Dependabot e `govulncheck` monitoram código e dependências. Relatos
+sensíveis devem seguir a política em [`SECURITY.md`](SECURITY.md), sem abrir
+detalhes exploráveis em uma issue pública.
 
 ## Equipe
 

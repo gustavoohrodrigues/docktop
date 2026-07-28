@@ -4,12 +4,6 @@ on:
   push:
     tags:
       - "v*.*.*"
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Versão sem o prefixo v (ex.: 0.3.0)"
-        required: true
-        type: string
 
 permissions:
   contents: write
@@ -20,6 +14,7 @@ jobs:
   release:
     name: Build, attest and publish
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Check out source
@@ -31,15 +26,12 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Validate version
+      - name: Validate tag
         id: version
         shell: bash
         run: |
           set -euo pipefail
-          version="${{ inputs.version }}"
-          if [[ -z "$version" ]]; then
-            version="${GITHUB_REF_NAME#v}"
-          fi
+          version="${GITHUB_REF_NAME#v}"
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Invalid release version: ${version}" >&2
             exit 1
@@ -91,18 +83,10 @@ jobs:
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
         run: |
           set -euo pipefail
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" \
-              dist/docktop-linux-amd64 \
-              dist/docktop-linux-arm64 \
-              dist/manifest.txt \
-              --clobber
-          else
-            gh release create "$RELEASE_TAG" \
-              dist/docktop-linux-amd64 \
-              dist/docktop-linux-arm64 \
-              dist/manifest.txt \
-              --title "DockTop $RELEASE_TAG" \
-              --generate-notes \
-              --verify-tag
-          fi
+          gh release create "$RELEASE_TAG" \
+            dist/docktop-linux-amd64 \
+            dist/docktop-linux-arm64 \
+            dist/manifest.txt \
+            --title "DockTop $RELEASE_TAG" \
+            --generate-notes \
+            --verify-tag

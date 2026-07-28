@@ -3,5 +3,19 @@
 coverage.out
 *.log
 
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+config.yaml
+config.local.yaml
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+id_rsa
+id_ed25519
+
 # Landing page local. Será publicada separadamente no Vercel.
 /website/
