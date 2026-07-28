@@ -6,7 +6,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.4
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/docker/docker v28.5.2+incompatible
-	github.com/docker/go-connections v0.5.0
+	github.com/docker/go-connections v0.8.1
 	gopkg.in/yaml.v3 v3.0.1
 )
 
