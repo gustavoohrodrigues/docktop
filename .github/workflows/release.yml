@@ -90,3 +90,49 @@ jobs:
             --title "DockTop $RELEASE_TAG" \
             --generate-notes \
             --verify-tag
+
+      - name: Check out website
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: gustavoohrodrigues/docktop-website
+          token: ${{ secrets.WEBSITE_REPO_TOKEN }}
+          path: website
+
+      - name: Update website downloads
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.number }}
+        run: |
+          set -euo pipefail
+          install -m 0755 dist/docktop-linux-amd64 website/downloads/docktop-linux-amd64
+          install -m 0755 dist/docktop-linux-arm64 website/downloads/docktop-linux-arm64
+
+          installer_hash="$(sha256sum website/docktop.sh | awk '{print $1}')"
+          update_check_hash="$(sha256sum website/update-check.sh | awk '{print $1}')"
+          {
+            printf 'version %s\n' "$VERSION"
+            for asset in docktop-linux-amd64 docktop-linux-arm64; do
+              printf '%s %s\n' \
+                "$asset" \
+                "$(sha256sum "website/downloads/$asset" | awk '{print $1}')"
+            done
+            printf 'docktop.sh %s\n' "$installer_hash"
+            printf 'update-check.sh %s\n' "$update_check_hash"
+          } > website/downloads/manifest.txt
+
+      - name: Publish website downloads
+        working-directory: website
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add downloads/
+          if git diff --cached --quiet; then
+            echo "Website downloads are already current."
+            exit 0
+          fi
+          git commit -m "Atualiza DockTop para ${RELEASE_TAG}"
+          git push origin HEAD:main
