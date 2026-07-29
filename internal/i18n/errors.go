@@ -13,5 +13,42 @@ func LocalizeError(language, text string) string {
 	for from, to := range errorTranslations[language] {
 		text = strings.ReplaceAll(text, from, to)
 	}
+	for from, translations := range securityErrorTranslations {
+		to := translations[0]
+		if language == "es" {
+			to = translations[1]
+		} else if language == "pt-BR" {
+			to = from
+		}
+		text = strings.ReplaceAll(text, from, to)
+	}
 	return text
+}
+
+var securityErrorTranslations = map[string][2]string{
+	"inspeção do container retornou configuração incompleta":               {"container inspection returned incomplete configuration", "la inspección del contenedor devolvió una configuración incompleta"},
+	"container gerenciado por Docker Compose":                              {"container is managed by Docker Compose", "contenedor gestionado por Docker Compose"},
+	"hardening direto foi bloqueado para não divergir do projeto Compose":  {"direct hardening was blocked to avoid diverging from the Compose project", "el hardening directo fue bloqueado para no divergir del proyecto Compose"},
+	"gere um override antes de aplicar hardening":                          {"generate an override before applying hardening", "genere un override antes de aplicar hardening"},
+	"container pertence a um serviço Swarm":                                {"container belongs to a Swarm service", "el contenedor pertenece a un servicio Swarm"},
+	"altere o service spec em vez de recriar a task":                       {"change the service spec instead of recreating the task", "cambie el service spec en lugar de recrear la task"},
+	"hardening deve alterar o service spec":                                {"hardening must change the service spec", "el hardening debe cambiar el service spec"},
+	"container mudou desde a inspeção; execute o hardening novamente":      {"container changed since inspection; run hardening again", "el contenedor cambió desde la inspección; ejecute el hardening nuevamente"},
+	"container mudou durante a operação; configuração original preservada": {"container changed during the operation; original configuration preserved", "el contenedor cambió durante la operación; configuración original preservada"},
+	"selecione ao menos um controle de hardening":                          {"select at least one hardening control", "seleccione al menos un control de hardening"},
+	"controle de hardening desconhecido":                                   {"unknown hardening control", "control de hardening desconocido"},
+	"os controles selecionados já estão aplicados":                         {"the selected controls are already applied", "los controles seleccionados ya están aplicados"},
+	"parar container original":                                             {"stop original container", "detener contenedor original"},
+	"preservar container original":                                         {"preserve original container", "preservar contenedor original"},
+	"container substituto não permaneceu em execução":                      {"replacement container did not remain running", "el contenedor sustituto no permaneció en ejecución"},
+	"health check do substituto retornou unhealthy":                        {"replacement health check returned unhealthy", "el health check del sustituto devolvió unhealthy"},
+	"tempo esgotado aguardando health check do substituto":                 {"timed out waiting for replacement health check", "se agotó el tiempo esperando el health check del sustituto"},
+	"criar substituto":                         {"create replacement", "crear sustituto"},
+	"iniciar substituto":                       {"start replacement", "iniciar sustituto"},
+	"validar substituto":                       {"validate replacement", "validar sustituto"},
+	"falhou; configuração original restaurada": {"failed; original configuration restored", "falló; configuración original restaurada"},
+	"rollback também falhou":                   {"rollback also failed", "el rollback también falló"},
+	"restaurar nome original":                  {"restore original name", "restaurar nombre original"},
+	"reiniciar original":                       {"restart original", "reiniciar original"},
+	"preservar/remover substituto falho":       {"preserve/remove failed replacement", "preservar/eliminar sustituto fallido"},
 }

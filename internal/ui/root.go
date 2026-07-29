@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -14,6 +15,7 @@ import (
 	dock "github.com/docktop/docktop/internal/docker"
 	"github.com/docktop/docktop/internal/i18n"
 	"github.com/docktop/docktop/internal/registry"
+	"github.com/docktop/docktop/internal/security"
 	"github.com/docktop/docktop/internal/theme"
 	"github.com/docktop/docktop/internal/utils"
 )
@@ -37,6 +39,19 @@ type auditMsg struct {
 	entries []audit.Entry
 	e       error
 }
+type securityAuditMsg struct {
+	report security.ContainerSecurityReport
+	e      error
+}
+type hardeningPlanMsg struct {
+	plan   security.HardeningPlan
+	review bool
+	e      error
+}
+type hardeningApplyMsg struct {
+	result security.HardeningResult
+	e      error
+}
 type tickMsg time.Time
 type splashFrameMsg time.Time
 
@@ -59,6 +74,9 @@ type Model struct {
 	th                                       theme.Theme
 	cpuHistory, memHistory                   []float64
 	auditEntries                             []audit.Entry
+	securityReport                           security.ContainerSecurityReport
+	hardeningPlan                            security.HardeningPlan
+	hardeningCursor                          int
 }
 
 func New(ctx context.Context, c config.Config, e dock.Engine, a *audit.Logger, v string) *Model {
@@ -132,6 +150,52 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if x.e != nil {
 			m.err = i18n.LocalizeError(m.cfg.Language, x.e.Error())
 		}
+	case securityAuditMsg:
+		m.loading = false
+		m.status = ""
+		if x.e != nil {
+			m.err = i18n.LocalizeError(m.cfg.Language, x.e.Error())
+			_ = m.audit.Write(audit.Entry{Host: m.engine.Endpoint(), Action: "security-audit", Resource: m.targetID, Result: m.tr("error"), Error: sanitize(x.e.Error())})
+			return m, nil
+		}
+		m.securityReport = x.report
+		m.mode = "security-report"
+		m.scroll = 0
+		m.err = ""
+		_ = m.audit.Write(audit.Entry{Host: m.engine.Endpoint(), Action: "security-audit", Resource: x.report.ContainerID, Result: "ok"})
+		return m, nil
+	case hardeningPlanMsg:
+		m.loading = false
+		m.status = ""
+		if x.e != nil {
+			m.err = i18n.LocalizeError(m.cfg.Language, x.e.Error())
+			return m, nil
+		}
+		m.hardeningPlan = x.plan
+		m.hardeningCursor = 0
+		if x.review {
+			m.mode = "hardening-review"
+		} else {
+			m.mode = "hardening-select"
+		}
+		m.scroll = 0
+		return m, nil
+	case hardeningApplyMsg:
+		m.loading = false
+		m.status = ""
+		result, errText := "ok", ""
+		if x.e != nil {
+			result = m.tr("error")
+			errText = sanitize(x.e.Error())
+			m.err = i18n.LocalizeError(m.cfg.Language, x.e.Error())
+		} else {
+			m.detail = m.renderHardeningResult(x.result)
+			m.mode = "detail"
+			m.scroll = 0
+			m.err = ""
+		}
+		_ = m.audit.Write(audit.Entry{Host: m.engine.Endpoint(), Action: "apply-hardening", Resource: m.targetID, Result: result, Error: errText})
+		return m, m.refresh()
 	case tickMsg:
 		if m.auto && m.mode == "" {
 			m.loading = true
@@ -334,6 +398,14 @@ func (m *Model) updateKeys(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.tab == 1 {
 			return m, m.containerOp("update-image")
 		}
+	case "a":
+		if m.tab == 1 {
+			return m, m.containerSecurityAudit()
+		}
+	case "H":
+		if m.tab == 1 {
+			return m, m.beginHardening()
+		}
 	case "s":
 		if m.tab == 7 && len(m.snap.Services) > 0 && !m.readOnly() {
 			m.openInput("scale-service", m.tr("scale_title"), m.tr("scale_prompt"))
@@ -390,6 +462,46 @@ func (m *Model) updateKeys(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) updateOverlay(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.mode == "hardening-select" {
+		switch k.String() {
+		case "esc", "q":
+			m.mode = ""
+		case "up", "k":
+			m.hardeningCursor = max(0, m.hardeningCursor-1)
+		case "down", "j":
+			m.hardeningCursor = min(len(m.hardeningPlan.Controls)-1, m.hardeningCursor+1)
+		case " ":
+			if len(m.hardeningPlan.Controls) > 0 && m.hardeningPlan.Controls[m.hardeningCursor].State != security.ControlApplied {
+				m.hardeningPlan.Controls[m.hardeningCursor].Selected = !m.hardeningPlan.Controls[m.hardeningCursor].Selected
+			}
+		case "enter":
+			selected := security.SelectedControlIDs(m.hardeningPlan)
+			if err := security.ValidateControlSelection(selected); err != nil {
+				m.err = i18n.LocalizeError(m.cfg.Language, err.Error())
+				return m, nil
+			}
+			m.loading = true
+			m.mode = ""
+			return m, m.prepareHardening(m.targetID, selected, true)
+		}
+		return m, nil
+	}
+	if m.mode == "hardening-review" {
+		switch k.String() {
+		case "esc", "q":
+			m.mode = "hardening-select"
+		case "up", "k":
+			m.scroll = max(0, m.scroll-1)
+		case "down", "j":
+			m.scroll++
+		case "enter":
+			m.mode = "hardening-confirm"
+			m.input = ""
+			m.prompt = fmt.Sprintf(m.tr("hardening_confirm"), m.hardeningPlan.ContainerName)
+			m.targetName = m.hardeningPlan.ContainerName
+		}
+		return m, nil
+	}
 	if m.mode == "language" {
 		languages := i18n.Languages()
 		switch k.String() {
@@ -408,7 +520,7 @@ func (m *Model) updateOverlay(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if m.mode == "detail" {
+	if m.mode == "detail" || m.mode == "security-report" {
 		switch k.String() {
 		case "esc", "q", "enter":
 			m.mode = ""
@@ -469,6 +581,16 @@ func (m *Model) submitOverlay() (tea.Model, tea.Cmd) {
 		}
 		m.mode = ""
 		return m, m.removeTarget()
+	}
+	if mode == "hardening-confirm" {
+		if input != m.targetName {
+			m.err = m.tr("confirm_mismatch")
+			return m, nil
+		}
+		selected := security.SelectedControlIDs(m.hardeningPlan)
+		m.mode, m.input, m.loading = "", "", true
+		m.status = m.tr("hardening_applying")
+		return m, m.applyHardening(m.targetID, selected)
 	}
 	if input == "" {
 		m.err = m.tr("required")
@@ -635,6 +757,51 @@ func (m *Model) containerDetail(kind string) tea.Cmd {
 			text, e = m.engine.Processes(ctx, id)
 		}
 		return opMsg{action: kind, resource: id, detail: text, e: e}
+	}
+}
+
+func (m *Model) containerSecurityAudit() tea.Cmd {
+	if m.tab != 1 || len(m.snap.Containers) == 0 {
+		return nil
+	}
+	id := m.snap.Containers[m.cursor].ID
+	m.targetID = id
+	m.loading = true
+	m.status = m.tr("security_audit_running")
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+		defer cancel()
+		report, err := m.engine.SecurityAudit(ctx, id)
+		return securityAuditMsg{report: report, e: err}
+	}
+}
+
+func (m *Model) beginHardening() tea.Cmd {
+	if m.tab != 1 || len(m.snap.Containers) == 0 || m.readOnly() {
+		return nil
+	}
+	selected := m.snap.Containers[m.cursor]
+	m.targetID, m.targetName = selected.ID, selected.Name
+	m.loading = true
+	m.status = m.tr("hardening_preparing")
+	return m.prepareHardening(selected.ID, nil, false)
+}
+
+func (m *Model) prepareHardening(id string, selected []security.HardeningControlID, review bool) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+		defer cancel()
+		plan, err := m.engine.PrepareHardening(ctx, id, selected)
+		return hardeningPlanMsg{plan: plan, review: review, e: err}
+	}
+}
+
+func (m *Model) applyHardening(id string, selected []security.HardeningControlID) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(m.ctx, 2*time.Minute)
+		defer cancel()
+		result, err := m.engine.ApplyHardening(ctx, id, selected)
+		return hardeningApplyMsg{result: result, e: err}
 	}
 }
 func (m *Model) execShell() tea.Cmd {
@@ -1200,6 +1367,18 @@ func (m *Model) overlay() string {
 		maxLines := m.h - 10
 		m.scroll = min(m.scroll, max(0, len(lines)-maxLines))
 		content = strings.Join(lines[m.scroll:min(len(lines), m.scroll+maxLines)], "\n") + "\n\n↑↓ " + m.tr("scroll") + " · Esc " + m.tr("close")
+	} else if m.mode == "security-report" {
+		lines := strings.Split(m.renderSecurityReport(), "\n")
+		maxLines := m.h - 10
+		m.scroll = min(m.scroll, max(0, len(lines)-maxLines))
+		content = strings.Join(lines[m.scroll:min(len(lines), m.scroll+maxLines)], "\n") + "\n\n↑↓ " + m.tr("scroll") + " · Esc " + m.tr("close")
+	} else if m.mode == "hardening-select" {
+		content = m.renderHardeningSelector()
+	} else if m.mode == "hardening-review" {
+		lines := strings.Split(m.renderHardeningReview(), "\n")
+		maxLines := m.h - 10
+		m.scroll = min(m.scroll, max(0, len(lines)-maxLines))
+		content = strings.Join(lines[m.scroll:min(len(lines), m.scroll+maxLines)], "\n") + "\n\n↑↓ " + m.tr("scroll") + " · Enter " + m.tr("continue") + " · Esc " + m.tr("back")
 	} else if m.mode == "help" {
 		lines := strings.Split(helpManual(m.cfg.Language), "\n")
 		maxLines := m.h - 9
@@ -1217,6 +1396,134 @@ func (m *Model) overlay() string {
 	width := min(88, m.w-8)
 	modal := lipgloss.NewStyle().Border(lipgloss.DoubleBorder()).BorderForeground(m.th.Color(map[bool]string{true: m.th.Danger, false: m.th.Focus}[m.mode == "confirm"])).Background(m.th.Color(m.th.Panel)).Padding(1, 2).Width(width).MaxHeight(m.h - 4).Render(content)
 	return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, modal)
+}
+
+func (m *Model) renderSecurityReport() string {
+	report := m.securityReport
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n\n%s: %s (%s)\n%s: %s\n%s: %s\n%s: %d/100\n%s: %s\n\n",
+		m.tr("security_audit_title"),
+		m.tr("container"), safeDisplay(report.ContainerName), safeDisplay(shortID(report.ContainerID)),
+		m.tr("image"), safeDisplay(report.Image),
+		m.tr("generated"), report.GeneratedAt.Local().Format("2006-01-02 15:04:05"),
+		m.tr("runtime_score"), report.RuntimeScore.Value,
+		m.tr("compose_managed"), yesNo(report.Compose, m.tr("yes"), m.tr("no")),
+	)
+	if len(report.Findings) == 0 {
+		b.WriteString(m.tr("security_no_findings") + "\n")
+	} else {
+		for index, finding := range report.Findings {
+			fmt.Fprintf(&b, "[%s] %d. %s\n", strings.ToUpper(i18n.SecurityText(m.cfg.Language, string(finding.Severity))), index+1, safeDisplay(i18n.SecurityText(m.cfg.Language, finding.Title)))
+			fmt.Fprintf(&b, "  %s: %s\n", m.tr("current_value"), safeDisplay(i18n.SecurityText(m.cfg.Language, finding.CurrentValue)))
+			fmt.Fprintf(&b, "  %s: %s\n", m.tr("security_risk"), safeDisplay(i18n.SecurityText(m.cfg.Language, finding.Risk)))
+			fmt.Fprintf(&b, "  %s: %s\n", m.tr("remediation"), safeDisplay(i18n.SecurityText(m.cfg.Language, finding.Remediation)))
+			fmt.Fprintf(&b, "  %s: %s · %s: %s\n", m.tr("automatic"), yesNo(finding.Automatic, m.tr("yes"), m.tr("no")), m.tr("recreation_required"), yesNo(finding.RecreationRequired, m.tr("yes"), m.tr("no")))
+			fmt.Fprintf(&b, "  %s: %s\n", m.tr("compatibility_impact"), safeDisplay(i18n.SecurityText(m.cfg.Language, finding.CompatibilityImpact)))
+			fmt.Fprintf(&b, "  %s: %s\n\n", m.tr("property"), safeDisplay(finding.Property))
+		}
+	}
+	b.WriteString(m.tr("security_score_warning") + "\n\n")
+	fmt.Fprintf(&b, "%s\n%s\n\n", m.tr("audit_controls_title"), m.tr("audit_controls_explanation"))
+	for _, control := range report.Controls {
+		marker := "[ ]"
+		if control.State == security.ControlApplied {
+			marker = "[✓]"
+		} else if control.State == security.ControlPartial {
+			marker = "[~]"
+		}
+		fmt.Fprintf(&b, "%s %-18s %s\n", marker, m.tr("hardening_state_"+string(control.State)), safeDisplay(i18n.SecurityText(m.cfg.Language, control.Title)))
+		fmt.Fprintf(&b, "  %s: %s → %s\n", m.tr("change"), safeDisplay(i18n.SecurityText(m.cfg.Language, control.CurrentValue)), safeDisplay(i18n.SecurityText(m.cfg.Language, control.ProposedValue)))
+		fmt.Fprintf(&b, "  %s: %s\n", m.tr("security_benefit"), safeDisplay(i18n.SecurityText(m.cfg.Language, control.Benefit)))
+		fmt.Fprintf(&b, "  %s: %s\n\n", m.tr("compatibility_impact"), safeDisplay(i18n.SecurityText(m.cfg.Language, control.CompatibilityRisk)))
+	}
+	return b.String()
+}
+
+func yesNo(value bool, yes, no string) string {
+	if value {
+		return yes
+	}
+	return no
+}
+
+func (m *Model) renderHardeningSelector() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n%s\n\n", m.tr("apply_hardening_title"), m.tr("hardening_select_help"))
+	pageSize := 10
+	if m.h > 24 {
+		pageSize = m.h - 16
+	}
+	start := max(0, m.hardeningCursor-pageSize/2)
+	start = min(start, max(0, len(m.hardeningPlan.Controls)-pageSize))
+	end := min(len(m.hardeningPlan.Controls), start+pageSize)
+	if start > 0 {
+		fmt.Fprintf(&b, "  ↑ %d\n", start)
+	}
+	for index := start; index < end; index++ {
+		control := m.hardeningPlan.Controls[index]
+		check := "[ ]"
+		if control.Selected {
+			check = "[x]"
+		}
+		if control.State == security.ControlApplied {
+			check = "[✓]"
+		}
+		fmt.Fprintf(&b, "%s %s %-18s %s\n", map[bool]string{true: "▸", false: " "}[index == m.hardeningCursor], check,
+			m.tr("hardening_state_"+string(control.State)), safeDisplay(i18n.SecurityText(m.cfg.Language, control.Title)))
+	}
+	if end < len(m.hardeningPlan.Controls) {
+		fmt.Fprintf(&b, "  ↓ %d\n", len(m.hardeningPlan.Controls)-end)
+	}
+	if len(m.hardeningPlan.Controls) > 0 {
+		control := m.hardeningPlan.Controls[m.hardeningCursor]
+		fmt.Fprintf(&b, "\n%s: %s\n%s: %s → %s\n%s: %s\n%s: %s\n%s: %s\n%s: %s\n",
+			m.tr("hardening_state"), m.tr("hardening_state_"+string(control.State)),
+			m.tr("change"), safeDisplay(i18n.SecurityText(m.cfg.Language, control.CurrentValue)), safeDisplay(i18n.SecurityText(m.cfg.Language, control.ProposedValue)),
+			m.tr("security_benefit"), safeDisplay(i18n.SecurityText(m.cfg.Language, control.Benefit)),
+			m.tr("compatibility_impact"), safeDisplay(i18n.SecurityText(m.cfg.Language, control.CompatibilityRisk)),
+			m.tr("os_support"), safeDisplay(i18n.SecurityText(m.cfg.Language, control.OperatingSystemSupport)),
+			m.tr("probable_incompatibility"), yesNo(control.ProbableIncompatibility, m.tr("yes"), m.tr("no")))
+	}
+	return b.String()
+}
+
+func (m *Model) renderHardeningReview() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\n\n%s: %s (%s)\n%s\n\n", m.tr("hardening_review_title"), m.tr("container"),
+		safeDisplay(m.hardeningPlan.ContainerName), safeDisplay(shortID(m.hardeningPlan.ContainerID)), m.tr("hardening_recreation_warning"))
+	for _, diff := range m.hardeningPlan.Diff {
+		fmt.Fprintf(&b, "• %s\n  - %s\n  + %s\n", safeDisplay(diff.Property), safeDisplay(i18n.SecurityText(m.cfg.Language, diff.Before)), safeDisplay(i18n.SecurityText(m.cfg.Language, diff.After)))
+	}
+	if len(m.hardeningPlan.Warnings) > 0 {
+		fmt.Fprintf(&b, "\n%s\n", m.tr("compatibility_warnings"))
+		for _, warning := range m.hardeningPlan.Warnings {
+			fmt.Fprintf(&b, "⚠ %s: %s\n", warning.Control, safeDisplay(i18n.SecurityText(m.cfg.Language, warning.Message)))
+		}
+	}
+	return b.String()
+}
+
+func (m *Model) renderHardeningResult(result security.HardeningResult) string {
+	var applied []string
+	for _, id := range result.AppliedControls {
+		applied = append(applied, string(id))
+	}
+	return fmt.Sprintf("%s\n\n%s: %s\n%s: %s\n%s: %s\n%s: %s\n%s: %s\n\n%s",
+		m.tr("hardening_complete"), m.tr("container"), safeDisplay(result.ContainerName),
+		m.tr("new_container_id"), safeDisplay(shortID(result.ContainerID)),
+		m.tr("backup_container"), safeDisplay(result.BackupContainerName),
+		m.tr("running"), yesNo(result.Running, m.tr("yes"), m.tr("no")),
+		m.tr("applied_controls"), strings.Join(applied, ", "),
+		m.tr("backup_retained_warning"))
+}
+
+func safeDisplay(value string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' || !unicode.IsControl(r) {
+			return r
+		}
+		return -1
+	}, value)
 }
 func (m *Model) cycleTheme() {
 	n := theme.Names()

@@ -27,6 +27,8 @@ CONTAINERS NO DOCKTOP
   o  processos   equivale ao docker top
   e  exec        abre bash/sh/ash real; use exit para voltar
   d  remover     remove após confirmação digitada
+  a  auditoria   inspeciona controles e mostra quais já estão aplicados
+  H  hardening   seleciona controles, revisa o diff e recria com rollback
 
 FORMULÁRIO DE CONTAINER
   Ordem: nome | imagem | portas | volumes | ambiente | restart | comando
@@ -163,6 +165,8 @@ CONTAINERS
   u pull and recreate with rollback; p pause/unpause
   l logs; i inspect; o processes; e exec shell
   d remove after typed confirmation
+  a audit inspects controls and shows which are already applied
+  H hardening selects controls, reviews the diff, and recreates with rollback
 
 IMAGES AND REGISTRY
   p pulls an image or selected Hub result
@@ -207,6 +211,8 @@ CONTENEDORES
   u descarga y recrea con rollback; p pausa/reanuda
   l logs; i inspect; o procesos; e shell exec
   d elimina después de confirmación escrita
+  a auditoría inspecciona controles y muestra cuáles ya están aplicados
+  H hardening selecciona controles, revisa el diff y recrea con rollback
 
 IMÁGENES Y REGISTRO
   p descarga una imagen o resultado seleccionado de Hub

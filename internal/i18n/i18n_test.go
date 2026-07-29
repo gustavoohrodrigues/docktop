@@ -30,3 +30,22 @@ func TestLocalizeError(t *testing.T) {
 		t.Fatalf("erro não traduzido: %q", got)
 	}
 }
+
+func TestSecurityTextUsesSelectedLanguage(t *testing.T) {
+	if got := SecurityText("pt-BR", "Container runs as root"); got != "Container executa como root" {
+		t.Fatalf("texto de segurança não traduzido: %q", got)
+	}
+	if got := SecurityText("es", "Enable no-new-privileges"); got != "Habilitar no-new-privileges" {
+		t.Fatalf("texto de seguridad no traducido: %q", got)
+	}
+	if got := SecurityText("en-US", "Container runs as root"); got != "Container runs as root" {
+		t.Fatalf("English security text changed: %q", got)
+	}
+}
+
+func TestLocalizeHardeningError(t *testing.T) {
+	got := LocalizeError("en-US", "container mudou desde a inspeção; execute o hardening novamente")
+	if got != "container changed since inspection; run hardening again" {
+		t.Fatalf("hardening error not localized: %q", got)
+	}
+}

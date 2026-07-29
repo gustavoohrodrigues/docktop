@@ -8,16 +8,20 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
+	"github.com/docker/go-units"
+	"github.com/docktop/docktop/internal/security"
 )
 
 func (s *SDK) metrics(ctx context.Context, containers []container.Summary) map[string]ContainerMetric {
@@ -91,6 +95,463 @@ func (s *SDK) Inspect(ctx context.Context, id string) (string, error) {
 	}
 	b, err := json.MarshalIndent(v, "", "  ")
 	return string(b), err
+}
+
+// SecurityAudit is read-only. It inspects the selected container once, maps
+// daemon-owned structures to the security package's stable input, and never
+// starts the workload or invokes commands inside it.
+func (s *SDK) SecurityAudit(ctx context.Context, id string) (security.ContainerSecurityReport, error) {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	v, err := s.cli.ContainerInspect(ctx, id)
+	if err != nil {
+		return security.ContainerSecurityReport{}, friendly(err, s.endpoint)
+	}
+	if v.Config == nil || v.HostConfig == nil {
+		return security.ContainerSecurityReport{}, errors.New("inspeção do container retornou configuração incompleta")
+	}
+	return security.AuditContainer(auditInputFromInspect(v), time.Now()), nil
+}
+
+func auditInputFromInspect(v container.InspectResponse) security.AuditInput {
+	in := security.AuditInput{
+		ContainerID:     v.ID,
+		ContainerName:   strings.TrimPrefix(v.Name, "/"),
+		ImageReference:  v.Config.Image,
+		User:            v.Config.User,
+		Privileged:      v.HostConfig.Privileged,
+		ReadonlyRootFS:  v.HostConfig.ReadonlyRootfs,
+		CapAdd:          append([]string(nil), v.HostConfig.CapAdd...),
+		CapDrop:         append([]string(nil), v.HostConfig.CapDrop...),
+		SecurityOptions: append([]string(nil), v.HostConfig.SecurityOpt...),
+		PIDMode:         string(v.HostConfig.PidMode),
+		IPCMode:         string(v.HostConfig.IpcMode),
+		NetworkMode:     string(v.HostConfig.NetworkMode),
+		UserNSMode:      string(v.HostConfig.UsernsMode),
+		MemoryLimit:     v.HostConfig.Memory,
+		MemorySwap:      v.HostConfig.MemorySwap,
+		NanoCPUs:        v.HostConfig.NanoCPUs,
+		CPUQuota:        v.HostConfig.CPUQuota,
+		CPUShares:       v.HostConfig.CPUShares,
+		HasHealthcheck:  v.Config.Healthcheck != nil,
+		AppArmorProfile: v.AppArmorProfile,
+		Environment:     append([]string(nil), v.Config.Env...),
+		Labels:          cloneStrings(v.Config.Labels),
+		Tmpfs:           cloneStrings(v.HostConfig.Tmpfs),
+	}
+	for _, limit := range v.HostConfig.Ulimits {
+		if limit != nil {
+			in.Ulimits = append(in.Ulimits, security.Ulimit{Name: limit.Name, Soft: limit.Soft, Hard: limit.Hard})
+		}
+	}
+	for _, option := range v.HostConfig.SecurityOpt {
+		if strings.EqualFold(option, "no-new-privileges") || strings.EqualFold(option, "no-new-privileges=true") {
+			in.NoNewPrivileges = true
+		}
+	}
+	if v.HostConfig.PidsLimit != nil {
+		in.PidsLimit = *v.HostConfig.PidsLimit
+	}
+	for _, mount := range v.Mounts {
+		in.Mounts = append(in.Mounts, security.Mount{
+			Type: string(mount.Type), Source: mount.Source, Destination: mount.Destination, ReadWrite: mount.RW,
+		})
+	}
+	for _, device := range v.HostConfig.Devices {
+		in.Devices = append(in.Devices, device.PathOnHost+" → "+device.PathInContainer)
+	}
+	if v.NetworkSettings != nil {
+		for port, bindings := range v.NetworkSettings.Ports {
+			if len(bindings) == 0 {
+				continue
+			}
+			for _, binding := range bindings {
+				host := binding.HostIP
+				if host == "" {
+					host = "*"
+				}
+				in.PublishedPorts = append(in.PublishedPorts, host+":"+binding.HostPort+"→"+string(port))
+			}
+		}
+	}
+	sort.Strings(in.PublishedPorts)
+	return in
+}
+
+func cloneStrings(values map[string]string) map[string]string {
+	out := make(map[string]string, len(values))
+	for key, value := range values {
+		out[key] = value
+	}
+	return out
+}
+
+func (s *SDK) PrepareHardening(ctx context.Context, id string, selected []security.HardeningControlID) (security.HardeningPlan, error) {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	v, err := s.cli.ContainerInspect(ctx, id)
+	if err != nil {
+		return security.HardeningPlan{}, friendly(err, s.endpoint)
+	}
+	if v.Config == nil || v.HostConfig == nil {
+		return security.HardeningPlan{}, errors.New("inspeção do container retornou configuração incompleta")
+	}
+	plan := security.GenerateHardeningPlan(auditInputFromInspect(v), selected)
+	if plan.ComposeManaged {
+		return plan, errors.New("container gerenciado por Docker Compose; hardening direto foi bloqueado para não divergir do projeto Compose")
+	}
+	if v.Config.Labels["com.docker.swarm.service.id"] != "" {
+		return plan, errors.New("container pertence a um serviço Swarm; altere o service spec em vez de recriar a task")
+	}
+	return plan, nil
+}
+
+func (s *SDK) ApplyHardening(ctx context.Context, expectedID string, selected []security.HardeningControlID) (security.HardeningResult, error) {
+	if err := security.ValidateControlSelection(selected); err != nil {
+		return security.HardeningResult{}, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	defer cancel()
+	old, err := s.cli.ContainerInspect(ctx, expectedID)
+	if err != nil {
+		return security.HardeningResult{}, friendly(err, s.endpoint)
+	}
+	if old.ID != expectedID {
+		return security.HardeningResult{}, errors.New("container mudou desde a inspeção; execute o hardening novamente")
+	}
+	if old.Config == nil || old.HostConfig == nil {
+		return security.HardeningResult{}, errors.New("inspeção do container retornou configuração incompleta")
+	}
+	plan := security.GenerateHardeningPlan(auditInputFromInspect(old), selected)
+	if plan.ComposeManaged {
+		return security.HardeningResult{}, errors.New("container gerenciado por Docker Compose; gere um override antes de aplicar hardening")
+	}
+	if old.Config.Labels["com.docker.swarm.service.id"] != "" {
+		return security.HardeningResult{}, errors.New("container pertence a um serviço Swarm; hardening deve alterar o service spec")
+	}
+	selected = security.SelectedControlIDs(plan)
+	if len(selected) == 0 {
+		return security.HardeningResult{}, errors.New("os controles selecionados já estão aplicados")
+	}
+
+	var cfg container.Config
+	var host container.HostConfig
+	if err = cloneJSON(old.Config, &cfg); err != nil {
+		return security.HardeningResult{}, err
+	}
+	if err = cloneJSON(old.HostConfig, &host); err != nil {
+		return security.HardeningResult{}, err
+	}
+	preserveVolumeMounts(old.Mounts, &host)
+	applySelectedControls(&cfg, &host, selected)
+
+	name := strings.TrimPrefix(old.Name, "/")
+	backup := name + ".docktop-before-hardening-" + time.Now().Format("20060102-150405")
+	wasRunning := old.State != nil && old.State.Running
+	if wasRunning {
+		stopTimeout := 10
+		if err = s.cli.ContainerStop(ctx, old.ID, container.StopOptions{Timeout: &stopTimeout}); err != nil {
+			return security.HardeningResult{}, fmt.Errorf("parar container original: %w", err)
+		}
+	}
+	latest, inspectErr := s.cli.ContainerInspect(ctx, old.ID)
+	if inspectErr != nil || latest.ID != expectedID {
+		if wasRunning {
+			_ = s.cli.ContainerStart(context.WithoutCancel(ctx), old.ID, container.StartOptions{})
+		}
+		return security.HardeningResult{}, errors.New("container mudou durante a operação; configuração original preservada")
+	}
+	if err = s.cli.ContainerRename(ctx, old.ID, backup); err != nil {
+		if wasRunning {
+			_ = s.cli.ContainerStart(context.WithoutCancel(ctx), old.ID, container.StartOptions{})
+		}
+		return security.HardeningResult{}, fmt.Errorf("preservar container original: %w", err)
+	}
+
+	networking := preservedNetworking(old, string(host.NetworkMode))
+	created, createErr := s.cli.ContainerCreate(ctx, &cfg, &host, networking, nil, name)
+	if createErr != nil {
+		rollbackErr := s.rollbackHardening(old.ID, "", name, wasRunning)
+		return security.HardeningResult{BackupContainerName: backup, RollbackApplied: rollbackErr == nil},
+			hardeningFailure("criar substituto", createErr, rollbackErr)
+	}
+	if wasRunning {
+		if err = s.cli.ContainerStart(ctx, created.ID, container.StartOptions{}); err != nil {
+			rollbackErr := s.rollbackHardening(old.ID, created.ID, name, true)
+			return security.HardeningResult{ContainerID: created.ID, BackupContainerName: backup, RollbackApplied: rollbackErr == nil},
+				hardeningFailure("iniciar substituto", err, rollbackErr)
+		}
+	}
+	running, healthy, validationErr := s.validateReplacement(ctx, created.ID, wasRunning, cfg.Healthcheck != nil)
+	if validationErr != nil {
+		rollbackErr := s.rollbackHardening(old.ID, created.ID, name, wasRunning)
+		return security.HardeningResult{ContainerID: created.ID, BackupContainerName: backup, RollbackApplied: rollbackErr == nil},
+			hardeningFailure("validar substituto", validationErr, rollbackErr)
+	}
+	return security.HardeningResult{
+		ContainerID: created.ID, ContainerName: name, BackupContainerName: backup,
+		AppliedControls: append([]security.HardeningControlID(nil), selected...), Running: running, Healthy: healthy,
+	}, nil
+}
+
+func applySelectedControls(cfg *container.Config, host *container.HostConfig, selected []security.HardeningControlID) {
+	for _, id := range selected {
+		switch id {
+		case security.ControlNoNewPrivileges:
+			if !hasSecurityOption(host.SecurityOpt, "no-new-privileges") {
+				host.SecurityOpt = append(host.SecurityOpt, "no-new-privileges=true")
+			}
+		case security.ControlDisablePrivileged:
+			host.Privileged = false
+		case security.ControlDropCapabilities:
+			host.CapDrop = []string{"ALL"}
+			host.CapAdd = nil
+		case security.ControlReadOnlyRootFS:
+			host.ReadonlyRootfs = true
+		case security.ControlNonRootUser:
+			cfg.User = "65532:65532"
+		case security.ControlPIDLimit:
+			limit := int64(512)
+			host.PidsLimit = &limit
+		case security.ControlMemoryLimit:
+			host.Memory = 512 << 20
+			if host.MemorySwap > 0 && host.MemorySwap < host.Memory {
+				host.MemorySwap = host.Memory
+			}
+		case security.ControlPrivatePID:
+			host.PidMode = ""
+		case security.ControlPrivateIPC:
+			host.IpcMode = ""
+		case security.ControlPrivateNetwork:
+			host.NetworkMode = "default"
+		case security.ControlRemoveDockerSocket:
+			host.Binds = filterDockerSocketBinds(host.Binds)
+			host.Mounts = filterDockerSocketMounts(host.Mounts)
+		case security.ControlRemoveDevices:
+			host.Devices = nil
+			host.DeviceCgroupRules = nil
+			host.DeviceRequests = nil
+		case security.ControlCPULimit:
+			if host.NanoCPUs <= 0 && host.CPUQuota <= 0 {
+				host.NanoCPUs = 1_000_000_000
+			}
+		case security.ControlSwapLimit:
+			if host.Memory <= 0 {
+				host.Memory = 512 << 20
+			}
+			host.MemorySwap = 512 << 20
+		case security.ControlNoFileLimit:
+			setUlimit(&host.Ulimits, "nofile", 1024, 4096)
+		case security.ControlDefaultSeccomp:
+			host.SecurityOpt = filterSecurityOption(host.SecurityOpt, "seccomp=")
+		case security.ControlAppArmor:
+			host.SecurityOpt = filterSecurityOption(host.SecurityOpt, "apparmor=")
+			host.SecurityOpt = append(host.SecurityOpt, "apparmor=docker-default")
+		case security.ControlPrivateUserNS:
+			host.UsernsMode = ""
+		case security.ControlTmpfsTmp:
+			if host.Tmpfs == nil {
+				host.Tmpfs = map[string]string{}
+			}
+			host.Tmpfs["/tmp"] = "rw,nosuid,nodev,noexec,size=64m"
+		case security.ControlTmpfsRun:
+			if host.Tmpfs == nil {
+				host.Tmpfs = map[string]string{}
+			}
+			host.Tmpfs["/run"] = "rw,nosuid,nodev,noexec,size=16m"
+		case security.ControlReadOnlySensitive:
+			host.Binds = readOnlySensitiveBinds(host.Binds)
+			for index := range host.Mounts {
+				if sensitiveHostPath(host.Mounts[index].Source) {
+					host.Mounts[index].ReadOnly = true
+				}
+			}
+		case security.ControlRemovePorts:
+			host.PortBindings = nil
+		}
+	}
+}
+
+func setUlimit(values *[]*units.Ulimit, name string, soft, hard int64) {
+	for _, item := range *values {
+		if item != nil && item.Name == name {
+			item.Soft, item.Hard = soft, hard
+			return
+		}
+	}
+	*values = append(*values, &units.Ulimit{Name: name, Soft: soft, Hard: hard})
+}
+
+func filterSecurityOption(options []string, prefix string) []string {
+	out := options[:0]
+	for _, option := range options {
+		if strings.HasPrefix(strings.ToLower(option), prefix) {
+			continue
+		}
+		out = append(out, option)
+	}
+	return out
+}
+
+func readOnlySensitiveBinds(binds []string) []string {
+	out := make([]string, 0, len(binds))
+	for _, bind := range binds {
+		parts := strings.Split(bind, ":")
+		if len(parts) < 2 || !sensitiveHostPath(parts[0]) {
+			out = append(out, bind)
+			continue
+		}
+		mode := "ro"
+		if len(parts) > 2 {
+			options := strings.Split(parts[2], ",")
+			filtered := options[:0]
+			for _, option := range options {
+				if option != "rw" && option != "ro" {
+					filtered = append(filtered, option)
+				}
+			}
+			filtered = append(filtered, "ro")
+			mode = strings.Join(filtered, ",")
+		}
+		out = append(out, parts[0]+":"+parts[1]+":"+mode)
+	}
+	return out
+}
+
+func sensitiveHostPath(source string) bool {
+	source = strings.TrimSuffix(source, "/")
+	for _, path := range []string{"/", "/boot", "/dev", "/etc", "/proc", "/root", "/run", "/sys", "/var/run", "/var/lib/docker", "/home"} {
+		if source == path || (path != "/" && strings.HasPrefix(source, path+"/")) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasSecurityOption(options []string, wanted string) bool {
+	for _, option := range options {
+		if strings.EqualFold(option, wanted) || strings.EqualFold(option, wanted+"=true") {
+			return true
+		}
+	}
+	return false
+}
+
+func filterDockerSocketBinds(binds []string) []string {
+	out := binds[:0]
+	for _, bind := range binds {
+		parts := strings.Split(bind, ":")
+		if len(parts) > 0 && strings.HasSuffix(parts[0], "/docker.sock") {
+			continue
+		}
+		if len(parts) > 1 && strings.HasSuffix(parts[1], "/docker.sock") {
+			continue
+		}
+		out = append(out, bind)
+	}
+	return out
+}
+
+func filterDockerSocketMounts(mounts []mount.Mount) []mount.Mount {
+	out := mounts[:0]
+	for _, item := range mounts {
+		if strings.HasSuffix(item.Source, "/docker.sock") || strings.HasSuffix(item.Target, "/docker.sock") {
+			continue
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func preservedNetworking(old container.InspectResponse, networkMode string) *network.NetworkingConfig {
+	out := &network.NetworkingConfig{EndpointsConfig: map[string]*network.EndpointSettings{}}
+	if old.NetworkSettings == nil {
+		return out
+	}
+	for name, endpoint := range old.NetworkSettings.Networks {
+		if name == "host" || name == "none" || networkMode == "host" || networkMode == "none" {
+			continue
+		}
+		if endpoint == nil {
+			continue
+		}
+		out.EndpointsConfig[name] = &network.EndpointSettings{
+			Aliases: append([]string(nil), endpoint.Aliases...), Links: append([]string(nil), endpoint.Links...),
+			DriverOpts: cloneStrings(endpoint.DriverOpts), GwPriority: endpoint.GwPriority,
+		}
+	}
+	return out
+}
+
+func (s *SDK) validateReplacement(ctx context.Context, id string, shouldRun, hasHealthcheck bool) (bool, bool, error) {
+	if !shouldRun {
+		return false, false, nil
+	}
+	started := time.Now()
+	for {
+		state, err := s.cli.ContainerInspect(ctx, id)
+		if err != nil {
+			return false, false, err
+		}
+		if state.State == nil || !state.State.Running {
+			message := "container substituto não permaneceu em execução"
+			if state.State != nil && state.State.Error != "" {
+				message += ": " + state.State.Error
+			}
+			return false, false, errors.New(message)
+		}
+		if !hasHealthcheck || state.State.Health == nil {
+			if time.Since(started) >= 2*time.Second {
+				return true, false, nil
+			}
+		} else {
+			switch state.State.Health.Status {
+			case "healthy":
+				return true, true, nil
+			case "unhealthy":
+				return true, false, errors.New("health check do substituto retornou unhealthy")
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return true, false, errors.New("tempo esgotado aguardando health check do substituto")
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+}
+
+func (s *SDK) rollbackHardening(oldID, failedID, originalName string, restart bool) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	var problems []string
+	if failedID != "" {
+		_ = s.cli.ContainerStop(ctx, failedID, container.StopOptions{})
+		diagnosticName := originalName + ".docktop-hardening-failed-" + time.Now().Format("20060102-150405")
+		if err := s.cli.ContainerRename(ctx, failedID, diagnosticName); err != nil {
+			if removeErr := s.cli.ContainerRemove(ctx, failedID, container.RemoveOptions{Force: true}); removeErr != nil {
+				problems = append(problems, "preservar/remover substituto falho: "+removeErr.Error())
+			}
+		}
+	}
+	if err := s.cli.ContainerRename(ctx, oldID, originalName); err != nil {
+		problems = append(problems, "restaurar nome original: "+err.Error())
+	}
+	if restart {
+		if err := s.cli.ContainerStart(ctx, oldID, container.StartOptions{}); err != nil {
+			problems = append(problems, "reiniciar original: "+err.Error())
+		}
+	}
+	if len(problems) > 0 {
+		return errors.New(strings.Join(problems, "; "))
+	}
+	return nil
+}
+
+func hardeningFailure(stage string, operationErr, rollbackErr error) error {
+	if rollbackErr != nil {
+		return fmt.Errorf("%s falhou: %v; rollback também falhou: %v", stage, operationErr, rollbackErr)
+	}
+	return fmt.Errorf("%s falhou; configuração original restaurada: %w", stage, operationErr)
 }
 
 func (s *SDK) Processes(ctx context.Context, id string) (string, error) {
