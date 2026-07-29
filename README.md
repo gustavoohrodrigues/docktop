@@ -504,13 +504,65 @@ Um projeto da [**Orqly**](https://www.linkedin.com/company/orqly/).
 
 </div>
 
-| Pessoa | Papel | GitHub | LinkedIn |
-|---|---|---|---|
-| Emanuel Sena | Contribuidor | [@EmanuelSena101](https://github.com/EmanuelSena101) | [Perfil](https://www.linkedin.com/in/emanuel-sena/) |
-| Otávio | Contribuidor | [@otaviozin](https://github.com/otaviozin) | [Perfil](https://www.linkedin.com/in/otavio-ppereira/) |
-| Lucas Roveri | Contribuidor | [@Lucas-V-Roveri](https://github.com/Lucas-V-Roveri) | [Perfil](https://www.linkedin.com/in/lucas-vilela-roveri-dev/) |
-| Gustavo Rodrigues | Criador e mantenedor | [@gustavoohrodrigues](https://github.com/gustavoohrodrigues) | [Perfil](https://www.linkedin.com/in/gustavo-henrique-rodrigues-3070a5260) |
-| Matheus Silva | Contribuidor | [@matjsz](https://github.com/matjsz) | [Perfil](https://www.linkedin.com/in/matjsilva/) |
+<table>
+  <tr>
+    <td align="center">
+      <a href="https://github.com/EmanuelSena101">
+        <img src="https://github.com/EmanuelSena101.png?size=320" width="110" alt="Foto de perfil de Emanuel Sena">
+      </a><br>
+      <sub><strong>CONTRIBUIDOR</strong></sub><br>
+      <strong>Emanuel Sena</strong><br>
+      <a href="https://github.com/EmanuelSena101">@EmanuelSena101</a><br>
+      <a href="https://www.linkedin.com/in/emanuel-sena/">
+        <img src="https://img.shields.io/badge/LinkedIn-0A66C2?style=flat-square&logo=linkedin&logoColor=white" alt="LinkedIn de Emanuel Sena">
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/otaviozin">
+        <img src="https://github.com/otaviozin.png?size=320" width="110" alt="Foto de perfil de Otávio">
+      </a><br>
+      <sub><strong>CONTRIBUIDOR</strong></sub><br>
+      <strong>Otávio</strong><br>
+      <a href="https://github.com/otaviozin">@otaviozin</a><br>
+      <a href="https://www.linkedin.com/in/otavio-ppereira/">
+        <img src="https://img.shields.io/badge/LinkedIn-0A66C2?style=flat-square&logo=linkedin&logoColor=white" alt="LinkedIn de Otávio">
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/Lucas-V-Roveri">
+        <img src="https://github.com/Lucas-V-Roveri.png?size=320" width="110" alt="Foto de perfil de Lucas Roveri">
+      </a><br>
+      <sub><strong>CONTRIBUIDOR</strong></sub><br>
+      <strong>Lucas Roveri</strong><br>
+      <a href="https://github.com/Lucas-V-Roveri">@Lucas-V-Roveri</a><br>
+      <a href="https://www.linkedin.com/in/lucas-vilela-roveri-dev/">
+        <img src="https://img.shields.io/badge/LinkedIn-0A66C2?style=flat-square&logo=linkedin&logoColor=white" alt="LinkedIn de Lucas Roveri">
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/gustavoohrodrigues">
+        <img src="https://github.com/gustavoohrodrigues.png?size=320" width="110" alt="Foto de perfil de Gustavo Rodrigues">
+      </a><br>
+      <sub><strong>CRIADOR E MANTENEDOR</strong></sub><br>
+      <strong>Gustavo Rodrigues</strong><br>
+      <a href="https://github.com/gustavoohrodrigues">@gustavoohrodrigues</a><br>
+      <a href="https://www.linkedin.com/in/gustavo-henrique-rodrigues-3070a5260">
+        <img src="https://img.shields.io/badge/LinkedIn-0A66C2?style=flat-square&logo=linkedin&logoColor=white" alt="LinkedIn de Gustavo Rodrigues">
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/matjsz">
+        <img src="https://github.com/matjsz.png?size=320" width="110" alt="Foto de perfil de Matheus Silva">
+      </a><br>
+      <sub><strong>CONTRIBUIDOR</strong></sub><br>
+      <strong>Matheus Silva</strong><br>
+      <a href="https://github.com/matjsz">@matjsz</a><br>
+      <a href="https://www.linkedin.com/in/matjsilva/">
+        <img src="https://img.shields.io/badge/LinkedIn-0A66C2?style=flat-square&logo=linkedin&logoColor=white" alt="LinkedIn de Matheus Silva">
+      </a>
+    </td>
+  </tr>
+</table>
 
 ## Licença
 
