@@ -19,6 +19,7 @@ import (
 	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
 	"github.com/docktop/docktop/internal/config"
+	"github.com/docktop/docktop/internal/security"
 )
 
 type Container struct{ ID, Name, Image, State, Status string }
@@ -85,6 +86,9 @@ type Engine interface {
 	Remove(context.Context, string, bool) error
 	Logs(context.Context, string, int) (string, error)
 	Inspect(context.Context, string) (string, error)
+	SecurityAudit(context.Context, string) (security.ContainerSecurityReport, error)
+	PrepareHardening(context.Context, string, []security.HardeningControlID) (security.HardeningPlan, error)
+	ApplyHardening(context.Context, string, []security.HardeningControlID) (security.HardeningResult, error)
 	Processes(context.Context, string) (string, error)
 	Pull(context.Context, string, func(string)) error
 	CreateContainer(context.Context, CreateRequest) (string, error)

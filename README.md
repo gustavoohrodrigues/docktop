@@ -233,6 +233,8 @@ docktop --help
 | `L` | Escolher o idioma em Settings |
 | `?` / `F1` | Abrir a ajuda |
 | `q` | Sair |
+| `a` | Executar auditoria de segurança somente leitura no container |
+| `H` | Selecionar e aplicar controles de hardening com recriação e rollback |
 
 Os atalhos disponíveis em cada contexto também aparecem no rodapé da aplicação.
 
@@ -297,6 +299,7 @@ Alterações em nodes e outras ações sensíveis respeitam o modo `--read-only`
 
 Segurança operacional faz parte do fluxo da aplicação:
 
+- na tela Containers, `a` executa explicitamente uma **Security Audit** somente leitura;
 - `--read-only` bloqueia operações de escrita;
 - remoções e mudanças críticas exigem confirmação;
 - variáveis com nomes como `password`, `token`, `secret`, `key` e `credential` são mascaradas;
@@ -304,6 +307,129 @@ Segurança operacional faz parte do fluxo da aplicação:
 - o histórico padrão fica em `~/.local/share/docktop/audit.jsonl`;
 - arquivos de auditoria usam permissão `0600` e diretórios usam `0700`;
 - rotação e retenção dos registros são configuráveis.
+
+### Security Audit de containers
+
+Selecione um container na tela **Containers** e pressione `a`. O DockTop usa
+somente `ContainerInspect` da Docker Engine API: não inicia o container, não
+executa processos dentro dele e não altera sua configuração.
+
+O relatório classifica achados como Critical, High, Medium, Low ou
+Informational e mostra, para cada item, o valor atual, risco, remediação,
+possibilidade de aplicação automática, necessidade de recriação, impacto de
+compatibilidade e a propriedade Docker usada como evidência. Valores de
+variáveis de ambiente com nomes que aparentam conter credenciais são sempre
+substituídos por `[REDACTED]`.
+
+As regras atuais avaliam execução como root, modo privilegiado,
+`no-new-privileges`, capabilities, filesystem raiz gravável, mounts sensíveis e
+amplos, socket Docker, devices, namespaces host PID/IPC/network/user, limites de
+CPU/memória/PIDs, portas publicadas, health check, seccomp, AppArmor/SELinux,
+possíveis secrets em ambiente, referências mutáveis de imagem e labels Docker
+Compose.
+
+Depois dos achados, a auditoria explica todos os controles disponíveis no
+Apply Hardening, incluindo limites de CPU, memória, swap, PIDs e `nofile`,
+seccomp, AppArmor, user namespaces, `tmpfs`, mounts sensíveis, portas
+publicadas, capabilities, usuário e filesystem raiz. Cada controle mostra:
+
+- `[✓] já aplicado`;
+- `[ ] não aplicado`;
+- `[~] parcial/revisar`;
+- valor detectado e valor proposto;
+- benefício e risco de compatibilidade.
+
+Essa seção é dinâmica: cada execução faz um novo `ContainerInspect`. Portanto,
+após aplicar hardening, uma nova auditoria mostra os controles efetivamente
+presentes na configuração recriada, em vez de confiar no plano anterior.
+
+O relatório inclui uma pontuação explicável de hardening em runtime. Cada
+dedução corresponde a um achado visível; a pontuação não mede vulnerabilidades
+da imagem e uma pontuação alta não garante segurança.
+
+> [!WARNING]
+> A auditoria é uma análise estática da configuração observável. Ela não garante
+> compatibilidade de uma remediação nem prova que o container ou a imagem são
+> seguros. A maioria dos controles de runtime exige recriação do container.
+
+### Apply Hardening
+
+Selecione um container standalone e pressione `H`. O DockTop:
+
+1. inspeciona novamente a configuração;
+2. mostra todos os controles disponíveis sem selecionar nenhum silenciosamente;
+   cada controle informa **já aplicado**, **não aplicado** ou
+   **parcial/revisar**;
+3. permite selecionar ou desmarcar cada controle com Espaço;
+4. mostra o valor atual, valor proposto, benefício, risco de compatibilidade,
+   suporte de sistema e incompatibilidade provável;
+5. gera um diff antes/depois;
+6. exige confirmação digitando exatamente o nome do container;
+7. para e renomeia o original para
+   `<nome>.docktop-before-hardening-<timestamp>`;
+8. cria o substituto preservando imagem, comando, ambiente, mounts, volumes,
+   portas, restart policy, health check, logging e aliases de rede;
+9. inicia e valida que o substituto permanece em execução e, quando disponível,
+   aguarda o health check;
+10. restaura automaticamente o original se criação, startup ou validação falhar.
+
+O backup original nunca é removido automaticamente após sucesso.
+
+Controles selecionáveis atualmente:
+
+- `no-new-privileges`;
+- desabilitar privileged mode;
+- drop de todas as Linux capabilities;
+- root filesystem somente leitura;
+- usuário não-root `65532:65532`;
+- limite de 512 PIDs;
+- limite de memória de 512 MiB;
+- namespaces privados de PID, IPC e rede;
+- remoção do socket Docker;
+- remoção de device mappings;
+- limite de CPU;
+- limite combinado de memória/swap;
+- limite `nofile`;
+- proteção seccomp padrão;
+- perfil AppArmor `docker-default`;
+- remoção do user namespace do host;
+- `tmpfs` restrito para `/tmp` e `/run`;
+- conversão de bind mounts sensíveis para somente leitura;
+- remoção explícita de todas as portas publicadas.
+
+Controles já aplicados aparecem com `[✓]`, permanecem visíveis para inspeção e
+não podem ser selecionados novamente. Configurações existentes que não
+correspondem exatamente à proposta — por exemplo, um perfil seccomp customizado
+ou um tmpfs menos restrito — aparecem como **parcial/revisar**.
+
+Os valores propostos de usuário, PIDs, CPU, memória, swap, `nofile` e `tmpfs`
+são sempre mostrados antes da confirmação. Eles não são considerados
+universalmente seguros ou compatíveis.
+
+Containers gerenciados por Docker Compose e tasks de Docker Swarm são
+bloqueados: recriá-los diretamente faria o estado divergir da configuração
+declarativa. O suporte futuro deve gerar um Compose override ou alterar o
+service spec correspondente.
+
+### Próximas fases de segurança
+
+- Vulnerability Scan com Trivy, JSON estruturado, execução local ou pela imagem
+  oficial fixada, SBOM e histórico serão adicionados atrás de uma interface de
+  scanner. Scans continuarão sendo executados somente quando solicitados.
+- Trivy local não requer uma API key para scans comuns. Credenciais são
+  opcionais para registries privados ou servidores remotos; como o DockTop ainda
+  não possui armazenamento seguro de credenciais, elas deverão permanecer
+  somente em memória até existir uma abstração apropriada.
+- Balanced e Strict ainda serão adicionados sobre o plano Custom já disponível.
+  Image hardening produzirá propostas de patch para Dockerfile e exigirá rebuild.
+- Restore Previous Configuration manterá versões e fará recriação com validação
+  e rollback. Containers Compose receberão propostas de override separadas, sem
+  sobrescrever o arquivo Compose original.
+
+Automated hardening não pode garantir compatibilidade. Uma varredura bem
+sucedida não prova que a imagem é segura. Resultados de vulnerabilidades
+dependem da atualização e cobertura da base do scanner. Restaurar uma
+configuração antiga pode reintroduzir fraquezas.
 
 ## Arquitetura
 
@@ -369,6 +495,15 @@ make run
 
 ## Limitações atuais
 
+- Security Audit e Apply Hardening Custom para containers standalone estão
+  implementados. Balanced, Strict, Restore Previous Configuration, Compose
+  overrides, Trivy, image hardening, SBOM e scan history ainda não estão
+  disponíveis.
+- O backup anterior é preservado como container, mas o histórico versionado e a
+  ação Restore Previous Configuration ainda não foram implementados.
+- A auditoria não executa o workload; portanto, requisitos de escrita,
+  capabilities e portas são marcados para validação quando não podem ser
+  inferidos com segurança.
 - Logs são carregados sob demanda, ainda sem follow contínuo.
 - O shell interativo ainda utiliza o Docker CLI para controlar o raw TTY; a detecção do shell usa a API.
 - Update avançado, rollback e remoção de serviços Swarm ainda não estão expostos.
