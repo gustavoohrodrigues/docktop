@@ -461,36 +461,11 @@ arquivos e se o daemon está escutando no endpoint configurado.
 
 ## Contribuindo
 
-Contribuições são bem-vindas.
+Contribuições são bem-vindas. Consulte o
+[guia de contribuição](CONTRIBUTING.md) para preparar o ambiente, enviar
+mudanças e executar as validações do projeto.
 
-1. Descreva claramente o problema ou comportamento desejado.
-2. Mantenha operações Docker fora da camada de UI.
-3. Adicione testes para regras de negócio e parsing.
-4. Execute `go test ./...` e `go build ./cmd/docktop`.
-5. Não adicione mocks ou ações decorativas ao fluxo de produção.
-
-Para mudanças maiores, abra uma issue ou discussão antes do pull request.
-
-## Publicação de versões
-
-O workflow [`.github/workflows/release.yml`](.github/workflows/release.yml):
-
-1. valida a tag semântica;
-2. executa os testes;
-3. compila Linux `amd64` e `arm64`;
-4. gera o manifesto SHA-256;
-5. atesta a procedência dos binários;
-6. publica a GitHub Release.
-
-Exemplo:
-
-```bash
-git tag -a v0.3.7 -m "DockTop v0.3.7"
-git push origin v0.3.7
-```
-
-O instalador consome diretamente a release oficial mais recente. O
-`docktop-website` sincroniza seu espelho de downloads por um workflow próprio.
+Falhas de segurança devem seguir a [política de segurança](SECURITY.md).
 
 ## Equipe
 
